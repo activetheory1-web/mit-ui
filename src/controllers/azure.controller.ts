@@ -7,7 +7,7 @@ export class AzureController {
   async connect(req: Request, res: Response) {
     try {
       const userId = 'dev_user';
-      const { subscriptionId, resourceGroup, workspaceName, clientId, clientSecret, tenantId } = req.body;
+      const { subscriptionId, resourceGroup, workspaceName, clientId, clientSecret, tenantId, appClientId } = req.body;
 
       if (!subscriptionId || !resourceGroup || !workspaceName || !clientId || !clientSecret || !tenantId) {
         return res.status(400).json({ error: 'Required fields are missing' });
@@ -17,7 +17,7 @@ export class AzureController {
       let existingConnection;
       try {
         existingConnection = await prisma.azureConnection.findFirst({
-          where: { userId, subscriptionId, workspaceName },
+          where: { userId, subscriptionId, workspaceName, appClientId },
         });
       } catch (e) {
         const { data } = await supabase
@@ -26,6 +26,7 @@ export class AzureController {
           .eq('userId', userId)
           .eq('subscriptionId', subscriptionId)
           .eq('workspaceName', workspaceName)
+          .eq('appClientId', appClientId)
           .maybeSingle();
         existingConnection = data;
       }
@@ -41,6 +42,7 @@ export class AzureController {
               clientId,
               clientSecret,
               tenantId,
+              appClientId,
               status: 'active',
               updatedAt: new Date(),
             },
@@ -49,6 +51,7 @@ export class AzureController {
           connection = await prisma.azureConnection.create({
             data: {
               userId,
+              appClientId,
               subscriptionId,
               resourceGroup,
               workspaceName,
@@ -59,11 +62,13 @@ export class AzureController {
             },
           });
         }
+
       } catch (prismaError) {
         console.warn('Prisma Azure connection failed, falling back to Supabase REST API');
         
         const connectionData = {
           userId,
+          appClientId,
           subscriptionId,
           resourceGroup,
           workspaceName,

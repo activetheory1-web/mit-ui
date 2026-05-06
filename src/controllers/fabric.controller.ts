@@ -7,7 +7,7 @@ export class FabricController {
   async connect(req: Request, res: Response) {
     try {
       const userId = 'dev_user';
-      const { workspaceId, capacityId, clientId, clientSecret, tenantId } = req.body;
+      const { workspaceId, capacityId, clientId, clientSecret, tenantId, appClientId } = req.body;
 
       if (!workspaceId || !clientId || !clientSecret || !tenantId) {
         return res.status(400).json({ error: 'Required fields are missing' });
@@ -17,7 +17,7 @@ export class FabricController {
       let existingConnection;
       try {
         existingConnection = await prisma.fabricConnection.findFirst({
-          where: { userId, workspaceId },
+          where: { userId, workspaceId, appClientId },
         });
       } catch (e) {
         const { data } = await supabase
@@ -25,6 +25,7 @@ export class FabricController {
           .select('id')
           .eq('userId', userId)
           .eq('workspaceId', workspaceId)
+          .eq('appClientId', appClientId)
           .maybeSingle();
         existingConnection = data;
       }
@@ -40,6 +41,7 @@ export class FabricController {
               clientId,
               clientSecret,
               tenantId,
+              appClientId,
               status: 'active',
               updatedAt: new Date(),
             },
@@ -48,6 +50,7 @@ export class FabricController {
           connection = await prisma.fabricConnection.create({
             data: {
               userId,
+              appClientId,
               workspaceId,
               capacityId,
               clientId,
@@ -57,11 +60,13 @@ export class FabricController {
             },
           });
         }
+
       } catch (prismaError) {
         console.warn('Prisma Fabric connection failed, falling back to Supabase REST API');
         
         const connectionData = {
           userId,
+          appClientId,
           workspaceId,
           capacityId,
           clientId,

@@ -189,6 +189,7 @@ model GoogleCampaign {
 model FabricConnection {
   id              String   @id @default(cuid())
   userId          String
+  appClientId     String?
   workspaceId     String
   capacityId      String?
   clientId        String
@@ -203,6 +204,7 @@ model FabricConnection {
 model AzureConnection {
   id              String   @id @default(cuid())
   userId          String
+  appClientId     String?
   subscriptionId  String
   resourceGroup   String
   workspaceName   String
