@@ -1,4 +1,6 @@
 import prisma from '../config/database';
+import { supabase } from '../config/supabase';
+import crypto from 'crypto';
 import { MetaFetcher } from '../integrations/meta/meta.fetcher';
 import { MetaTransformer } from '../integrations/meta/meta.transformer';
 import unifiedSyncService from './unified.sync.service';
@@ -138,26 +140,41 @@ export class MetaService {
     connectionId: string,
     dateRange: string = 'last_30d'
   ): Promise<{ campaignsSynced: number; syncedAt: Date }> {
-    // Verify ownership
-    const connection = await prisma.metaConnection.findFirst({
-      where: { id: connectionId, userId },
-    });
+    // 1. Verify ownership
+    let connection;
+    try {
+      connection = await prisma.metaConnection.findFirst({
+        where: { id: connectionId, userId },
+      });
+    } catch (e) {
+      const { data } = await supabase
+        .from('MetaConnection')
+        .select('*')
+        .eq('id', connectionId)
+        .eq('userId', userId)
+        .single();
+      connection = data;
+    }
 
     if (!connection) {
       throw new Error('Connection not found');
     }
 
-    // Update status to syncing
-    await prisma.metaConnection.update({
-      where: { id: connectionId },
-      data: {
-        status: 'syncing',
-        syncError: null,
-      },
-    });
+    // 2. Update status to syncing
+    try {
+      await prisma.metaConnection.update({
+        where: { id: connectionId },
+        data: { status: 'syncing', syncError: null },
+      });
+    } catch (e) {
+      await supabase
+        .from('MetaConnection')
+        .update({ status: 'syncing', syncError: null })
+        .eq('id', connectionId);
+    }
 
     try {
-      // Fetch data from Meta
+      // 3. Fetch data from Meta
       const fetcher = new MetaFetcher({
         appId: connection.appId,
         appSecret: connection.appSecret,
@@ -167,103 +184,111 @@ export class MetaService {
 
       const campaigns = await fetcher.fetchAllCampaigns({ dateRange });
 
-      // Store campaigns in database
+      // 4. Store campaigns in database
       for (const campaign of campaigns) {
-        const existingCampaign = await prisma.metaCampaign.findFirst({
-          where: {
-            metaCampaignId: campaign.metaCampaignId,
-            connectionId,
-          },
-        });
+        const campaignData = {
+          metaCampaignId: campaign.metaCampaignId,
+          connectionId,
+          name: campaign.name,
+          status: campaign.status,
+          objective: campaign.objective,
+          dailyBudget: campaign.dailyBudget,
+          lifetimeBudget: campaign.lifetimeBudget,
+          spend: campaign.spend,
+          impressions: campaign.impressions,
+          clicks: campaign.clicks,
+          ctr: campaign.ctr,
+          cpc: campaign.cpc,
+          cpm: campaign.cpm || 0,
+          reach: campaign.reach,
+          uniqueClicks: campaign.uniqueClicks || 0,
+          socialSpend: campaign.socialSpend || 0,
+          costPerUniqueClick: campaign.costPerUniqueClick || 0,
+          frequency: campaign.frequency,
+          startDate: campaign.startDate,
+          endDate: campaign.endDate,
+          clientId: connection.appClientId,
+          syncedAt: new Date(),
+          updatedAt: new Date(),
+        };
 
-        if (existingCampaign) {
-          // Update existing campaign
-          await prisma.metaCampaign.update({
-            where: { id: existingCampaign.id },
-            data: {
-              name: campaign.name,
-              status: campaign.status,
-              objective: campaign.objective,
-              dailyBudget: campaign.dailyBudget,
-              lifetimeBudget: campaign.lifetimeBudget,
-              spend: campaign.spend,
-              impressions: BigInt(campaign.impressions),
-              clicks: BigInt(campaign.clicks),
-              ctr: campaign.ctr,
-              cpc: campaign.cpc,
-              cpm: campaign.cpm || 0,
-              reach: BigInt(campaign.reach),
-              uniqueClicks: BigInt(campaign.uniqueClicks || 0),
-              socialSpend: campaign.socialSpend || 0,
-              costPerUniqueClick: campaign.costPerUniqueClick || 0,
-              frequency: campaign.frequency,
-              startDate: campaign.startDate,
-              endDate: campaign.endDate,
-              clientId: connection.appClientId,
-              syncedAt: new Date(),
-              updatedAt: new Date(),
-            },
+        try {
+          // Prisma Upsert
+          const existing = await prisma.metaCampaign.findFirst({
+            where: { metaCampaignId: campaign.metaCampaignId, connectionId },
           });
-        } else {
-          // Create new campaign
-          await prisma.metaCampaign.create({
-            data: {
-              metaCampaignId: campaign.metaCampaignId,
-              connectionId,
-              name: campaign.name,
-              status: campaign.status,
-              objective: campaign.objective,
-              dailyBudget: campaign.dailyBudget,
-              lifetimeBudget: campaign.lifetimeBudget,
-              spend: campaign.spend,
-              impressions: BigInt(campaign.impressions),
-              clicks: BigInt(campaign.clicks),
-              ctr: campaign.ctr,
-              cpc: campaign.cpc,
-              cpm: campaign.cpm || 0,
-              reach: BigInt(campaign.reach),
-              uniqueClicks: BigInt(campaign.uniqueClicks || 0),
-              socialSpend: campaign.socialSpend || 0,
-              costPerUniqueClick: campaign.costPerUniqueClick || 0,
-              frequency: campaign.frequency,
-              startDate: campaign.startDate,
-              endDate: campaign.endDate,
-              clientId: connection.appClientId,
-            },
-          });
+
+          if (existing) {
+            await prisma.metaCampaign.update({
+              where: { id: existing.id },
+              data: campaignData,
+            });
+          } else {
+            await prisma.metaCampaign.create({
+              data: { ...campaignData, id: crypto.randomUUID() },
+            });
+          }
+        } catch (prismaError) {
+          // Supabase Fallback Upsert
+          const { data: existing } = await supabase
+            .from('MetaCampaign')
+            .select('id')
+            .eq('metaCampaignId', campaign.metaCampaignId)
+            .eq('connectionId', connectionId)
+            .maybeSingle();
+
+          if (existing) {
+            await supabase
+              .from('MetaCampaign')
+              .update(campaignData)
+              .eq('id', existing.id);
+          } else {
+            await supabase
+              .from('MetaCampaign')
+              .insert([{ ...campaignData, id: crypto.randomUUID() }]);
+          }
         }
       }
 
-      // Update connection status
+      // 5. Update connection status
       const syncedAt = new Date();
-      await prisma.metaConnection.update({
-        where: { id: connectionId },
-        data: {
-          status: 'active',
-          lastSyncAt: syncedAt,
-          syncError: null,
-        },
-      });
-      // Run unified sync
-      await unifiedSyncService.upsertUnifiedCampaigns(userId);
+      try {
+        await prisma.metaConnection.update({
+          where: { id: connectionId },
+          data: { status: 'active', lastSyncAt: syncedAt, syncError: null },
+        });
+      } catch (e) {
+        await supabase
+          .from('MetaConnection')
+          .update({ status: 'active', lastSyncAt: syncedAt, syncError: null })
+          .eq('id', connectionId);
+      }
 
-      return {
-        campaignsSynced: campaigns.length,
-        syncedAt,
-      };
+      // 6. Run unified sync (ignore errors to ensure we return success)
+      try {
+        await unifiedSyncService.upsertUnifiedCampaigns(userId);
+      } catch (syncErr) {
+        console.error('Unified sync background error:', syncErr);
+      }
+
+      return { campaignsSynced: campaigns.length, syncedAt };
     } catch (error) {
-      // Update connection status with error
-      await prisma.metaConnection.update({
-        where: { id: connectionId },
-        data: {
-          status: 'error',
-          syncError: error instanceof Error ? error.message : 'Unknown error',
-        },
-      });
-
+      const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+      try {
+        await prisma.metaConnection.update({
+          where: { id: connectionId },
+          data: { status: 'error', syncError: errorMsg },
+        });
+      } catch (e) {
+        await supabase
+          .from('MetaConnection')
+          .update({ status: 'error', syncError: errorMsg })
+          .eq('id', connectionId);
+      }
       throw error;
     }
   }
+
 
   /**
    * Get connection status

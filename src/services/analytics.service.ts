@@ -1,4 +1,5 @@
 import { getFabricConnection } from '../integrations/fabric/fabric.client';
+import { supabase } from '../config/supabase';
 import sql from 'mssql';
 import { executeWidgetQueryLocal } from '../integrations/local/local.queries';
 
@@ -278,10 +279,67 @@ export class AnalyticsService {
         return { kpi, dailySpend, spendByCampaign, clicksByCampaign, campaignTable };
       }
     } catch (fabricError) {
-      console.warn('Fabric data fetch failed, falling back to local data:', fabricError);
+      console.warn('Fabric data fetch failed, checking database fallback:', fabricError);
     }
 
-    // 2. FALLBACK: Fetch from Local Database/CSV (Testing Mode)
+    // 2. FALLBACK: Fetch from Supabase Database (Real Synced Data)
+    try {
+      const { data: dbCampaigns, error: dbError } = await supabase
+        .from('Campaign')
+        .select('*')
+        .eq('channel', 'Meta');
+
+      if (dbCampaigns && dbCampaigns.length > 0) {
+        const kpi: KpiSummary = {
+          total_spend: dbCampaigns.reduce((s, c) => s + (c.spend || 0), 0),
+          total_impressions: dbCampaigns.reduce((s, c) => s + (c.impressions || 0), 0),
+          total_clicks: dbCampaigns.reduce((s, c) => s + (c.clicks || 0), 0),
+          avg_ctr: dbCampaigns.length > 0 ? (dbCampaigns.reduce((s, c) => s + (c.ctr || 0), 0) / dbCampaigns.length) : 0,
+          avg_cpc: dbCampaigns.length > 0 ? (dbCampaigns.reduce((s, c) => s + (c.cpc || 0), 0) / dbCampaigns.length) : 0,
+          total_reach: dbCampaigns.reduce((s, c) => s + (c.total_reach || 0), 0),
+        };
+
+        const campaignTable: CampaignTableRow[] = dbCampaigns.map(c => ({
+          campaign_name: c.name,
+          campaign_status: c.status,
+          total_spend: c.spend || 0,
+          total_impressions: c.impressions || 0,
+          total_clicks: c.clicks || 0,
+          ctr: c.ctr || 0,
+          cpc: c.cpc || 0,
+          total_reach: c.total_reach || 0,
+        }));
+
+        const spendByCampaign: CampaignSpendRow[] = [...campaignTable]
+          .sort((a, b) => b.total_spend - a.total_spend)
+          .slice(0, 10)
+          .map(c => ({
+            campaign_name: c.campaign_name,
+            total_spend: c.total_spend,
+            total_clicks: c.total_clicks,
+            total_impressions: c.total_impressions,
+            ctr: c.ctr
+          }));
+
+        const clicksByCampaign: CampaignClickRow[] = [...campaignTable]
+          .sort((a, b) => b.total_clicks - a.total_clicks)
+          .slice(0, 10)
+          .map(c => ({
+            campaign_name: c.campaign_name,
+            total_clicks: c.total_clicks,
+            total_spend: c.total_spend,
+            total_impressions: c.total_impressions
+          }));
+
+        const dailySpend: DailySpendRow[] = []; // Aggregation by date needed for real trend
+
+        return { kpi, dailySpend, spendByCampaign, clicksByCampaign, campaignTable };
+      }
+    } catch (dbFallbackError) {
+      console.warn('Supabase dashboard fetch failed, falling back to local data:', dbFallbackError);
+    }
+
+    // 3. LAST RESORT: Fetch from Local Database/CSV (Testing Mode)
     // This ensures consistency across all browsers by serving server-side data
     const localData = await executeWidgetQueryLocal({}, tenantId);
 

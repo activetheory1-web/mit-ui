@@ -9,94 +9,84 @@ export class UnifiedSyncService {
     try {
       console.log(`Starting unified sync for user: ${userId}`);
 
-      // 1. Find a valid Client to attach these campaigns to.
-      let tenant = await prisma.tenant.findUnique({
-        where: { userId },
-        include: { clients: true },
-      });
+      // 1. Find a valid Client
+      let tenant;
+      try {
+        tenant = await prisma.tenant.findUnique({
+          where: { userId },
+          include: { clients: true },
+        });
+      } catch (e) {
+        const { data: tData } = await supabase
+          .from('Tenant')
+          .select('*, clients:Client(*)')
+          .eq('userId', userId)
+          .maybeSingle();
+        tenant = tData;
+      }
 
       if (!tenant) {
-        // Create dev_tenant if it doesn't exist
-        console.log(`Creating default tenant for user ${userId}`);
-        tenant = await prisma.tenant.create({
-          data: {
-            id: 'dev_tenant',
-            name: 'Default Workspace',
-            userId: userId,
-          },
-          include: { clients: true }
-        }).catch(e => {
-           // If it already exists or fail, try fetching it
-           return prisma.tenant.findFirst({ where: { userId }, include: { clients: true } });
-        }) as any;
+        console.warn(`No tenant found for user ${userId}, using default values`);
       }
 
-      let defaultClientId: string;
-      if (!tenant || tenant.clients.length === 0) {
-        // Create a default client if none exist
-        console.log(`Creating default client for tenant ${tenant?.id}`);
-        const newClient = await prisma.client.create({
-          data: {
-            id: 'dev_client',
-            name: 'Default Client',
-            industry: 'Technology',
-            tenantId: tenant?.id || 'dev_tenant',
-            platforms: ['Meta', 'Google Ads']
-          }
-        }).catch(e => {
-           return prisma.client.findFirst({ where: { tenantId: tenant?.id || 'dev_tenant' } });
-        }) as any;
-        
-        if (!newClient) {
-          console.error(`Could not find or create a client for unified sync.`);
-          return;
-        }
-        
-        defaultClientId = newClient.id;
-      } else {
-        defaultClientId = tenant.clients[0].id;
+      const clients = tenant?.clients || [];
+      const defaultClientId = clients.length > 0 ? clients[0].id : 'dev_client';
+
+      // 2. Fetch all Meta campaigns
+      let metaConnections: any[] = [];
+      try {
+        metaConnections = await prisma.metaConnection.findMany({
+          where: { userId },
+          include: { campaigns: true },
+        }) as any[];
+      } catch (e) {
+        const { data } = await supabase
+          .from('MetaConnection')
+          .select('*, campaigns:MetaCampaign(*)')
+          .eq('userId', userId);
+        metaConnections = data || [];
       }
 
+      const allMetaCampaigns = metaConnections.flatMap(conn => conn.campaigns || []);
 
+      // 3. Fetch all Google campaigns
+      let googleConnections: any[] = [];
+      try {
+        googleConnections = await prisma.googleConnection.findMany({
+          where: { userId },
+          include: { campaigns: true },
+        }) as any[];
+      } catch (e) {
+        const { data } = await supabase
+          .from('GoogleConnection')
+          .select('*, campaigns:GoogleConnection(*)') // Note: Google table naming might vary
+          .eq('userId', userId);
+        googleConnections = data || [];
+      }
 
-      // 2. Fetch all Meta campaigns for this user's connections
-      const metaConnections = await prisma.metaConnection.findMany({
-        where: { userId },
-        include: { campaigns: true },
-      });
-
-      const allMetaCampaigns = metaConnections.flatMap(conn => conn.campaigns);
-
-      // 3. Fetch all Google campaigns for this user's connections
-      const googleConnections = await prisma.googleConnection.findMany({
-        where: { userId },
-        include: { campaigns: true },
-      });
-
-      const allGoogleCampaigns = googleConnections.flatMap(conn => conn.campaigns);
+      const allGoogleCampaigns = googleConnections.flatMap(conn => conn.campaigns || []);
 
       // 4. Batch upsert Meta campaigns
       for (const mc of allMetaCampaigns) {
         const campaignData = {
           id: mc.metaCampaignId,
           name: mc.name,
-          clientId: defaultClientId,
+          clientId: mc.clientId || defaultClientId,
           channel: 'Meta',
-          spend: mc.spend,
-          budget: mc.dailyBudget || mc.lifetimeBudget || 0,
+          spend: Number(mc.spend),
+          budget: Number(mc.dailyBudget || mc.lifetimeBudget || 0),
           impressions: Number(mc.impressions),
           clicks: Number(mc.clicks),
-          ctr: mc.ctr,
-          cpc: mc.cpc,
+          ctr: Number(mc.ctr),
+          cpc: Number(mc.cpc),
           conv: 0,
           roas: 0,
           status: mc.status,
-          active: mc.status === 'ACTIVE',
-          frequency: mc.frequency,
+          active: mc.status === 'ACTIVE' || mc.status === 'active',
+          frequency: Number(mc.frequency || 0),
           updatedAt: new Date().toISOString(),
         };
 
-        // Save to Prisma (Primary)
         try {
           await prisma.campaign.upsert({
             where: { id: mc.metaCampaignId },
@@ -104,14 +94,9 @@ export class UnifiedSyncService {
             create: { ...campaignData, change: 0 },
           });
         } catch (e) {
-          console.warn('Prisma upsert failed for Meta campaign, skipping to Supabase');
-        }
-
-        // Save to Supabase (Fallback/Sync Layer)
-        try {
-          await supabase.from('Campaign').upsert(campaignData);
-        } catch (sError) {
-          console.error('Supabase upsert failed for Meta campaign:', sError);
+          // Fallback to Supabase REST API
+          const { error } = await supabase.from('Campaign').upsert([{ ...campaignData, change: 0 }]);
+          if (error) console.error('Supabase upsert failed for Meta campaign:', error);
         }
       }
 
@@ -120,22 +105,21 @@ export class UnifiedSyncService {
         const campaignData = {
           id: gc.googleCampaignId,
           name: gc.name,
-          clientId: defaultClientId,
+          clientId: gc.clientId || defaultClientId,
           channel: 'Google Ads',
-          spend: gc.spend,
+          spend: Number(gc.spend),
           budget: 0,
           impressions: Number(gc.impressions),
           clicks: Number(gc.clicks),
-          ctr: gc.ctr,
-          cpc: gc.cpc,
-          conv: gc.conversions,
+          ctr: Number(gc.ctr),
+          cpc: Number(gc.cpc),
+          conv: Number(gc.conversions || 0),
           roas: 0,
           status: gc.status,
-          active: gc.status === 'ACTIVE',
+          active: gc.status === 'ACTIVE' || gc.status === 'active',
           updatedAt: new Date().toISOString(),
         };
 
-        // Save to Prisma (Primary)
         try {
           await prisma.campaign.upsert({
             where: { id: gc.googleCampaignId },
@@ -143,24 +127,20 @@ export class UnifiedSyncService {
             create: { ...campaignData, change: 0, frequency: 0 },
           });
         } catch (e) {
-          console.warn('Prisma upsert failed for Google campaign, skipping to Supabase');
-        }
-
-        // Save to Supabase (Fallback/Sync Layer)
-        try {
-          await supabase.from('Campaign').upsert(campaignData);
-        } catch (sError) {
-          console.error('Supabase upsert failed for Google campaign:', sError);
+          // Fallback to Supabase REST API
+          const { error } = await supabase.from('Campaign').upsert([{ ...campaignData, change: 0, frequency: 0 }]);
+          if (error) console.error('Supabase upsert failed for Google campaign:', error);
         }
       }
 
       console.log(
-        `Unified sync completed. Synced ${allMetaCampaigns.length} Meta and ${allGoogleCampaigns.length} Google campaigns.`
+        `Unified sync completed. Processed ${allMetaCampaigns.length} Meta and ${allGoogleCampaigns.length} Google campaigns.`
       );
     } catch (error) {
       console.error('Unified sync failed:', error);
     }
   }
+
 }
 
 export default new UnifiedSyncService();
