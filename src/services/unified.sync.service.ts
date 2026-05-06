@@ -10,17 +10,54 @@ export class UnifiedSyncService {
       console.log(`Starting unified sync for user: ${userId}`);
 
       // 1. Find a valid Client to attach these campaigns to.
-      const tenant = await prisma.tenant.findUnique({
+      let tenant = await prisma.tenant.findUnique({
         where: { userId },
         include: { clients: true },
       });
 
-      if (!tenant || tenant.clients.length === 0) {
-        console.warn(`No clients found for user ${userId}. Skipping unified sync.`);
-        return;
+      if (!tenant) {
+        // Create dev_tenant if it doesn't exist
+        console.log(`Creating default tenant for user ${userId}`);
+        tenant = await prisma.tenant.create({
+          data: {
+            id: 'dev_tenant',
+            name: 'Default Workspace',
+            userId: userId,
+          },
+          include: { clients: true }
+        }).catch(e => {
+           // If it already exists or fail, try fetching it
+           return prisma.tenant.findFirst({ where: { userId }, include: { clients: true } });
+        }) as any;
       }
 
-      const defaultClientId = tenant.clients[0].id;
+      let defaultClientId: string;
+      if (!tenant || tenant.clients.length === 0) {
+        // Create a default client if none exist
+        console.log(`Creating default client for tenant ${tenant?.id}`);
+        const newClient = await prisma.client.create({
+          data: {
+            id: 'dev_client',
+            name: 'Default Client',
+            industry: 'Technology',
+            tenantId: tenant?.id || 'dev_tenant',
+            platforms: ['Meta', 'Google Ads']
+          }
+        }).catch(e => {
+           return prisma.client.findFirst({ where: { tenantId: tenant?.id || 'dev_tenant' } });
+        }) as any;
+        
+        if (!newClient) {
+          console.error(`Could not find or create a client for unified sync.`);
+          return;
+        }
+        
+        defaultClientId = newClient.id;
+      } else {
+        defaultClientId = tenant.clients[0].id;
+      }
+
+
 
       // 2. Fetch all Meta campaigns for this user's connections
       const metaConnections = await prisma.metaConnection.findMany({

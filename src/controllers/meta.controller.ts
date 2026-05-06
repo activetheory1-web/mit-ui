@@ -10,11 +10,7 @@ export class MetaController {
    */
   async connect(req: Request, res: Response) {
     try {
-      const userId = (req as any).user?.userId;
-      if (!userId) {
-        return res.status(401).json({ error: 'Unauthorized' });
-      }
-
+      const userId = 'dev_user';
       const { appId, appSecret, accessToken, adAccountId, appClientId } = req.body;
 
       // Validate required fields
@@ -40,12 +36,24 @@ export class MetaController {
       }
 
       // Check if connection already exists for this user and account
-      const existingConnection = await prisma.metaConnection.findFirst({
-        where: {
-          userId,
-          adAccountId,
-        },
-      });
+      let existingConnection;
+      try {
+        existingConnection = await prisma.metaConnection.findFirst({
+          where: {
+            userId,
+            adAccountId,
+          },
+        });
+      } catch (e) {
+        // Fallback for check
+        const { data } = await supabase
+          .from('MetaConnection')
+          .select('id')
+          .eq('userId', userId)
+          .eq('adAccountId', adAccountId)
+          .maybeSingle();
+        existingConnection = data;
+      }
 
       let connection;
 
@@ -96,14 +104,28 @@ export class MetaController {
           updatedAt: new Date().toISOString()
         };
 
-        const { data, error } = await supabase
-          .from('MetaConnection')
-          .upsert([connectionData], { onConflict: 'userId,adAccountId' })
-          .select()
-          .single();
-
-        if (error) throw error;
-        connection = data;
+        if (existingConnection) {
+          // Update existing
+          const { data: updated, error: updateError } = await supabase
+            .from('MetaConnection')
+            .update(connectionData)
+            .eq('id', existingConnection.id)
+            .select()
+            .single();
+          
+          if (updateError) throw updateError;
+          connection = updated;
+        } else {
+          // Insert new
+          const { data: inserted, error: insertError } = await supabase
+            .from('MetaConnection')
+            .insert([connectionData])
+            .select()
+            .single();
+          
+          if (insertError) throw insertError;
+          connection = inserted;
+        }
       }
 
       res.status(201).json({
@@ -123,14 +145,11 @@ export class MetaController {
   }
 
   /**
-   * Get all Meta connections for the user
+   * Get all Meta connections
    */
   async getConnections(req: Request, res: Response) {
     try {
-      const userId = (req as any).user?.userId;
-      if (!userId) {
-        return res.status(401).json({ error: 'Unauthorized' });
-      }
+      const userId = 'dev_user';
 
       let connections;
       try {
@@ -159,23 +178,11 @@ export class MetaController {
           .order('createdAt', { ascending: false });
         
         if (error) throw error;
-        connections = data;
+        connections = data || [];
       }
 
       if (connections.length === 0) {
-        console.warn('⚠️ No Meta connections found. Returning mock connection for development.');
-        return res.json([
-          {
-            id: 'mock_meta_conn_1',
-            accountName: 'Development Meta Ads Account',
-            adAccountId: 'act_1234567890',
-            status: 'active',
-            lastSyncAt: new Date().toISOString(),
-            campaignCount: 4,
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-          }
-        ]);
+        return res.json([]);
       }
 
       // Get campaign count for each connection
@@ -187,7 +194,7 @@ export class MetaController {
               where: { connectionId: connection.id },
             });
           } catch (e) {
-            // Fallback for campaign count
+            // Fallback for campaign count using Supabase REST
             const { count } = await supabase
               .from('MetaCampaign')
               .select('*', { count: 'exact', head: true })
@@ -214,11 +221,7 @@ export class MetaController {
    */
   async deleteConnection(req: Request, res: Response) {
     try {
-      const userId = (req as any).user?.userId;
-      if (!userId) {
-        return res.status(401).json({ error: 'Unauthorized' });
-      }
-
+      const userId = 'dev_user';
       const id = req.params.id as string;
 
       try {
@@ -260,11 +263,7 @@ export class MetaController {
    */
   async sync(req: Request, res: Response) {
     try {
-      const userId = (req as any).user?.userId;
-      if (!userId) {
-        return res.status(401).json({ error: 'Unauthorized' });
-      }
-
+      const userId = 'dev_user';
       const id = req.params.id as string;
       const { dateRange = 'maximum' } = req.body;
 
@@ -303,35 +302,51 @@ export class MetaController {
    */
   async getStatus(req: Request, res: Response) {
     try {
-      const userId = (req as any).user?.userId;
-      if (!userId) {
-        return res.status(401).json({ error: 'Unauthorized' });
-      }
-
+      const userId = 'dev_user';
       const id = req.params.id as string;
 
-      const connection = await prisma.metaConnection.findFirst({
-        where: { id, userId },
-        select: {
-          id: true,
-          accountName: true,
-          adAccountId: true,
-          status: true,
-          lastSyncAt: true,
-          syncError: true,
-          createdAt: true,
-          updatedAt: true,
-        },
-      });
+      let connection;
+      try {
+        connection = await prisma.metaConnection.findFirst({
+          where: { id, userId },
+          select: {
+            id: true,
+            accountName: true,
+            adAccountId: true,
+            status: true,
+            lastSyncAt: true,
+            syncError: true,
+            createdAt: true,
+            updatedAt: true,
+          },
+        });
+      } catch (e) {
+        const { data } = await supabase
+          .from('MetaConnection')
+          .select('*')
+          .eq('id', id)
+          .eq('userId', userId)
+          .single();
+        connection = data;
+      }
 
       if (!connection) {
         return res.status(404).json({ error: 'Connection not found' });
       }
 
       // Get campaign count
-      const campaignCount = await prisma.metaCampaign.count({
-        where: { connectionId: id },
-      });
+      let campaignCount = 0;
+      try {
+        campaignCount = await prisma.metaCampaign.count({
+          where: { connectionId: id },
+        });
+      } catch (e) {
+        const { count } = await supabase
+          .from('MetaCampaign')
+          .select('*', { count: 'exact', head: true })
+          .eq('connectionId', id);
+        campaignCount = count || 0;
+      }
 
       res.json({
         ...connection,
@@ -348,28 +363,45 @@ export class MetaController {
    */
   async getCampaigns(req: Request, res: Response) {
     try {
-      const userId = (req as any).user?.userId;
-      if (!userId) {
-        return res.status(401).json({ error: 'Unauthorized' });
-      }
-
+      const userId = 'dev_user';
       const connectionId = req.params.connectionId as string;
 
       // Verify ownership
-      const connection = await prisma.metaConnection.findFirst({
-        where: { id: connectionId, userId },
-      });
+      let connection;
+      try {
+        connection = await prisma.metaConnection.findFirst({
+          where: { id: connectionId, userId },
+        });
+      } catch (e) {
+        const { data } = await supabase
+          .from('MetaConnection')
+          .select('id')
+          .eq('id', connectionId)
+          .eq('userId', userId)
+          .single();
+        connection = data;
+      }
 
       if (!connection) {
         return res.status(404).json({ error: 'Connection not found' });
       }
 
-      const campaigns = await prisma.metaCampaign.findMany({
-        where: { connectionId },
-        orderBy: {
-          syncedAt: 'desc',
-        },
-      });
+      let campaigns;
+      try {
+        campaigns = await prisma.metaCampaign.findMany({
+          where: { connectionId },
+          orderBy: {
+            syncedAt: 'desc',
+          },
+        });
+      } catch (e) {
+        const { data } = await supabase
+          .from('MetaCampaign')
+          .select('*')
+          .eq('connectionId', connectionId)
+          .order('syncedAt', { ascending: false });
+        campaigns = data || [];
+      }
 
       res.json(campaigns);
     } catch (error) {

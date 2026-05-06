@@ -13,26 +13,8 @@ export class AnalyticsController {
    */
   async getMetaDashboard(req: Request, res: Response): Promise<void> {
     try {
-      const user = (req as any).user;
-
-      if (!user || !user.userId) {
-        res.status(401).json({ error: 'Unauthorized' });
-        return;
-      }
-
-      const userId = user.userId;
-
-      // Resolve tenantId from JWT or DB
-      let tenantId = user.tenantId;
-      if (!tenantId) {
-        const tenant = await prisma.tenant.findUnique({ where: { userId } });
-        tenantId = tenant ? tenant.id : null;
-      }
-
-      if (!tenantId) {
-        console.warn('⚠️ No tenant found for user. Using fallback "dev_tenant" for development.');
-        tenantId = 'dev_tenant';
-      }
+      // Auth disabled: using default tenant scoping
+      const tenantId = 'dev_tenant';
 
       // Parse query params
       const dateRange = parseInt(req.query.dateRange as string) || 30;
@@ -54,5 +36,6 @@ export class AnalyticsController {
     }
   }
 }
+
 
 export default new AnalyticsController();

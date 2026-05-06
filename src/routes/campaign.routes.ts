@@ -10,8 +10,9 @@ import {
 
 const router = Router();
 
-// All routes are protected
-router.use(authMiddleware);
+// Authentication disabled per user request
+// router.use(authMiddleware);
+
 
 /**
  * @swagger

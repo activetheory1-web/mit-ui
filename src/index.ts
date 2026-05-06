@@ -10,7 +10,11 @@ import googleRoutes from './routes/google.routes';
 import oauthRoutes from './routes/oauth.routes';
 import analyticsRoutes from './routes/analytics.routes';
 import clientRoutes from './routes/client.routes';
-import errorMiddleware from './middleware/error.middleware';
+import fabricRoutes from './routes/fabric.routes';
+import azureRoutes from './routes/azure.routes';
+
+// import errorMiddleware from './middleware/error.middleware';
+
 import { globalLimiter } from './middleware/rateLimit.middleware';
 import { requestLogger } from './middleware/requestLogger.middleware';
 import swaggerUi from 'swagger-ui-express';
@@ -35,7 +39,6 @@ app.use(globalLimiter);
 app.use(requestLogger);
 
 // Routes
-app.use('/api/auth', authRoutes);
 app.use('/api/clients', clientRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/campaigns', campaignRoutes);
@@ -44,6 +47,10 @@ app.use('/api/meta', metaRoutes);
 app.use('/api/google', googleRoutes);
 app.use('/api/oauth', oauthRoutes);
 app.use('/api/analytics', analyticsRoutes);
+app.use('/api/fabric', fabricRoutes);
+app.use('/api/azure', azureRoutes);
+
+
 
 // API Documentation
 app.use(
@@ -57,7 +64,7 @@ app.use(
 app.get('/api/docs.json', (req, res) => res.json(swaggerSpec));
 
 // Error handling
-app.use(errorMiddleware);
+// app.use(errorMiddleware);
 
 app.listen(PORT, () => {
   logger.info(`Server running in ${process.env.NODE_ENV || 'development'} mode on port ${PORT}`);

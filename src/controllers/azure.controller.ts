@@ -1,0 +1,165 @@
+import { Request, Response } from 'express';
+import prisma from '../config/database';
+import { supabase } from '../config/supabase';
+
+export class AzureController {
+
+  async connect(req: Request, res: Response) {
+    try {
+      const userId = 'dev_user';
+      const { subscriptionId, resourceGroup, workspaceName, clientId, clientSecret, tenantId } = req.body;
+
+      if (!subscriptionId || !resourceGroup || !workspaceName || !clientId || !clientSecret || !tenantId) {
+        return res.status(400).json({ error: 'Required fields are missing' });
+      }
+
+      // Check if connection already exists
+      let existingConnection;
+      try {
+        existingConnection = await prisma.azureConnection.findFirst({
+          where: { userId, subscriptionId, workspaceName },
+        });
+      } catch (e) {
+        const { data } = await supabase
+          .from('AzureConnection')
+          .select('id')
+          .eq('userId', userId)
+          .eq('subscriptionId', subscriptionId)
+          .eq('workspaceName', workspaceName)
+          .maybeSingle();
+        existingConnection = data;
+      }
+
+      let connection;
+
+      try {
+        if (existingConnection) {
+          connection = await prisma.azureConnection.update({
+            where: { id: existingConnection.id },
+            data: {
+              resourceGroup,
+              clientId,
+              clientSecret,
+              tenantId,
+              status: 'active',
+              updatedAt: new Date(),
+            },
+          });
+        } else {
+          connection = await prisma.azureConnection.create({
+            data: {
+              userId,
+              subscriptionId,
+              resourceGroup,
+              workspaceName,
+              clientId,
+              clientSecret,
+              tenantId,
+              status: 'active',
+            },
+          });
+        }
+      } catch (prismaError) {
+        console.warn('Prisma Azure connection failed, falling back to Supabase REST API');
+        
+        const connectionData = {
+          userId,
+          subscriptionId,
+          resourceGroup,
+          workspaceName,
+          clientId,
+          clientSecret,
+          tenantId,
+          status: 'active',
+          updatedAt: new Date().toISOString()
+        };
+
+        if (existingConnection) {
+          const { data: updated, error: updateError } = await supabase
+            .from('AzureConnection')
+            .update(connectionData)
+            .eq('id', existingConnection.id)
+            .select()
+            .single();
+          
+          if (updateError) throw updateError;
+          connection = updated;
+        } else {
+          const { data: inserted, error: insertError } = await supabase
+            .from('AzureConnection')
+            .insert([connectionData])
+            .select()
+            .single();
+          
+          if (insertError) throw insertError;
+          connection = inserted;
+        }
+      }
+
+      res.status(201).json({
+        id: connection.id,
+        workspaceName: connection.workspaceName,
+        status: connection.status,
+      });
+    } catch (error) {
+      console.error('Azure connection error:', error);
+      res.status(500).json({ error: 'Failed to connect Azure' });
+    }
+  }
+
+  async getConnections(req: Request, res: Response) {
+    try {
+      const userId = 'dev_user';
+
+      let connections;
+      try {
+        connections = await prisma.azureConnection.findMany({
+          where: { userId },
+          orderBy: { createdAt: 'desc' },
+        });
+      } catch (prismaError) {
+        const { data, error } = await supabase
+          .from('AzureConnection')
+          .select('*')
+          .eq('userId', userId)
+          .order('createdAt', { ascending: false });
+        
+        if (error) throw error;
+        connections = data || [];
+      }
+
+      res.json(connections);
+    } catch (error) {
+      console.error('Failed to get Azure connections:', error);
+      res.status(500).json({ error: 'Failed to get connections' });
+    }
+  }
+
+  async deleteConnection(req: Request, res: Response) {
+    try {
+      const userId = 'dev_user';
+      const id = req.params.id as string;
+
+      try {
+        await prisma.azureConnection.delete({
+          where: { id, userId },
+        });
+      } catch (prismaError) {
+        const { error } = await supabase
+          .from('AzureConnection')
+          .delete()
+          .eq('id', id)
+          .eq('userId', userId);
+
+        if (error) throw error;
+      }
+
+      res.status(204).send();
+    } catch (error) {
+      console.error('Failed to delete Azure connection:', error);
+      res.status(500).json({ error: 'Failed to delete connection' });
+    }
+  }
+}
+
+export default new AzureController();

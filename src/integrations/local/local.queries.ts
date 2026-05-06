@@ -88,11 +88,15 @@ export async function executeWidgetQueryLocal(widget: any, clientId?: string): P
           date: new Date().toISOString()
         }));
       }
+    }
+    
     // 4. Ultimate Fallback: High-Quality Mock Data for Development
     console.warn('⚠️ All data sources failed. Using hardcoded mock data for development.');
     return [
       {
         campaign_name: 'Summer Sale 2024 - Meta',
+
+
         source: 'Meta',
         campaign_status: 'active',
         spend: 4500.50,

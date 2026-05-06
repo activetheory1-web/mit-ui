@@ -5,11 +5,11 @@ import { supabase } from '../config/supabase';
 export class ClientController {
   async getAll(req: Request, res: Response) {
     try {
-      const userId = (req as any).user?.userId;
+      // Auth disabled: fetching all clients or scoping to dev_user
+      const userId = 'dev_user';
       
       try {
         const clients = await prisma.client.findMany({
-          where: userId ? { tenant: { userId } } : {},
           include: {
             campaigns: true,
             dashboards: true,
@@ -28,37 +28,15 @@ export class ClientController {
             .select('*')
             .order('createdAt', { ascending: false });
 
-          if (data && data.length > 0) {
+          if (data) {
             return res.json(data);
           }
         } catch (supabaseError) {
-          console.warn('Supabase REST fetch failed, using mock data:', (supabaseError as any).message);
+          console.error('Database and Supabase fetch failed:', (supabaseError as any).message);
+          return res.status(503).json({ error: 'Data service unavailable' });
         }
 
-        // Final fallback: Mock data for development
-        console.warn('⚠️ No clients found in DB or Supabase. Returning mock data.');
-        return res.json([
-          {
-            id: 'mock_client_1',
-            name: 'Retail Brand X',
-            industry: 'E-commerce',
-            platforms: ['Meta', 'Google'],
-            monthlyBudget: 15000,
-            accountManager: 'Praveen',
-            status: 'active',
-            since: '2023-01-01'
-          },
-          {
-            id: 'mock_client_2',
-            name: 'SaaS Client Y',
-            industry: 'Technology',
-            platforms: ['Google', 'LinkedIn'],
-            monthlyBudget: 8000,
-            accountManager: 'Developer',
-            status: 'active',
-            since: '2024-02-15'
-          }
-        ]);
+        return res.json([]);
       }
     } catch (error) {
       console.error('Client fetch error:', error);
@@ -68,12 +46,11 @@ export class ClientController {
 
   async getById(req: Request, res: Response) {
     try {
-      const userId = (req as any).user?.userId;
       const id = req.params.id as string;
       
       try {
         const client = await prisma.client.findFirst({
-          where: userId ? { id, tenant: { userId } } : { id },
+          where: { id },
           include: {
             campaigns: true,
             dashboards: true,
@@ -102,19 +79,12 @@ export class ClientController {
 
   async create(req: Request, res: Response) {
     try {
-      const userId = (req as any).user?.userId;
-      if (!userId) return res.status(401).json({ error: 'Unauthorized' });
-
       const { name, industry, platforms } = req.body;
 
       try {
         const tenant = await prisma.tenant.findFirst({
-          where: { userId },
+          where: { userId: 'dev_user' },
         });
-
-        if (!tenant && userId !== 'dev_user') {
-          return res.status(404).json({ error: 'Tenant not found' });
-        }
 
         const client = await prisma.client.create({
           data: {
@@ -133,7 +103,7 @@ export class ClientController {
           .insert([{ 
             name, 
             industry, 
-            tenantId: (req as any).user?.tenantId || 'dev_tenant',
+            tenantId: 'dev_tenant',
             platforms: platforms || [] 
           }])
           .select()
@@ -150,9 +120,6 @@ export class ClientController {
 
   async update(req: Request, res: Response) {
     try {
-      const userId = (req as any).user?.userId;
-      if (!userId) return res.status(401).json({ error: 'Unauthorized' });
-
       const id = req.params.id as string;
       const { name, industry, platforms } = req.body;
 
@@ -181,9 +148,6 @@ export class ClientController {
 
   async delete(req: Request, res: Response) {
     try {
-      const userId = (req as any).user?.userId;
-      if (!userId) return res.status(401).json({ error: 'Unauthorized' });
-
       const id = req.params.id as string;
 
       try {
@@ -206,5 +170,6 @@ export class ClientController {
     }
   }
 }
+
 
 export default new ClientController();

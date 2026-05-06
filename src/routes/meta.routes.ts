@@ -8,8 +8,9 @@ const router = Router();
 router.post('/test-connection', metaController.testConnection.bind(metaController));
 router.post('/proxy-fetch-campaigns', metaController.proxyFetchCampaigns.bind(metaController));
 
-// All other routes are protected
-router.use(authMiddleware);
+// Authentication disabled per user request
+// router.use(authMiddleware);
+
 
 /**
  * @swagger

@@ -7,7 +7,9 @@ import { generateDashboardSchema } from '../validators/ai.validator';
 
 const router = Router();
 
-// router.use(authMiddleware); // Bypassed for testing
+// Authentication disabled per user request
+// router.use(authMiddleware);
+
 
 /**
  * @swagger

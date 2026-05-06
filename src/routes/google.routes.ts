@@ -4,8 +4,9 @@ import { authMiddleware } from '../middleware/auth.middleware';
 
 const router = Router();
 
-// All Google routes require authentication
-router.use(authMiddleware);
+// Authentication disabled per user request
+// router.use(authMiddleware);
+
 
 /**
  * @swagger

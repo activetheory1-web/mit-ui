@@ -62,7 +62,7 @@ export class AIController {
   async generateDashboard(req: Request, res: Response): Promise<void> {
     try {
       const { prompt, clientId } = req.body;
-      const user = (req as any).user;
+
 
       // 1. Fetch REAL DATA Context
       const snapshot = await AISnapshotService.getClientSnapshot(clientId);

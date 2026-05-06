@@ -30,25 +30,59 @@ export class AuthService {
     const { email, password, name } = data;
 
     // Check if user already exists
-    const existingUser = await prisma.user.findUnique({
-      where: { email },
-    });
+    let existingUser;
+    try {
+      existingUser = await prisma.user.findUnique({
+        where: { email },
+      });
+    } catch (prismaError) {
+      console.warn('Prisma check user exists failed, falling back to Supabase REST API');
+      const { supabase } = require('../config/supabase');
+      const { data, error } = await supabase
+        .from('User')
+        .select('*')
+        .eq('email', email)
+        .maybeSingle();
+      
+      if (error) throw error;
+      existingUser = data;
+    }
 
     if (existingUser) {
       throw new Error('User already exists');
     }
 
+
     // Hash password
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    // Create user
-    const user = await prisma.user.create({
-      data: {
-        email,
-        password: hashedPassword,
-        name,
-      },
-    });
+    let user;
+    try {
+      // Create user in Prisma
+      user = await prisma.user.create({
+        data: {
+          email,
+          password: hashedPassword,
+          name,
+        },
+      });
+    } catch (prismaError) {
+      console.warn('Prisma registration failed, falling back to Supabase REST API');
+      const { supabase } = require('../config/supabase');
+      const { data: inserted, error: insertError } = await supabase
+        .from('User')
+        .insert([{
+          email,
+          password: hashedPassword,
+          name,
+          createdAt: new Date().toISOString()
+        }])
+        .select()
+        .single();
+      
+      if (insertError) throw insertError;
+      user = inserted;
+    }
 
     // Generate token
     const token = this.generateToken(user.id);
@@ -63,17 +97,33 @@ export class AuthService {
     };
   }
 
+
   async login(data: LoginData): Promise<AuthResponse> {
     const { email, password } = data;
 
     // Find user
-    const user = await prisma.user.findUnique({
-      where: { email },
-    });
+    let user;
+    try {
+      user = await prisma.user.findUnique({
+        where: { email },
+      });
+    } catch (prismaError) {
+      console.warn('Prisma login failed, falling back to Supabase REST API');
+      const { supabase } = require('../config/supabase');
+      const { data, error } = await supabase
+        .from('User')
+        .select('*')
+        .eq('email', email)
+        .maybeSingle();
+      
+      if (error) throw error;
+      user = data;
+    }
 
     if (!user) {
       throw new Error('Invalid credentials');
     }
+
 
     // Verify password
     const isValidPassword = await bcrypt.compare(password, user.password);

@@ -4,7 +4,9 @@ import authMiddleware from '../middleware/auth.middleware';
 
 const router = Router();
 
-router.use(authMiddleware);
+// Authentication disabled per user request
+// router.use(authMiddleware);
+
 
 /**
  * @swagger

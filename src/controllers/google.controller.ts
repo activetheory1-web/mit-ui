@@ -8,11 +8,7 @@ export class GoogleController {
    */
   async sync(req: Request, res: Response) {
     try {
-      const userId = (req as any).user?.userId;
-      if (!userId) {
-        return res.status(401).json({ error: 'Unauthorized' });
-      }
-
+      const userId = 'dev_user';
       const id = req.params.id as string;
       const { dateRange = 'LAST_30_DAYS' } = req.body;
 
@@ -42,14 +38,11 @@ export class GoogleController {
   }
 
   /**
-   * Get all Google connections for current user
+   * Get all Google connections
    */
   async getConnections(req: Request, res: Response) {
     try {
-      const userId = (req as any).user?.userId;
-      if (!userId) {
-        return res.status(401).json({ error: 'Unauthorized' });
-      }
+      const userId = 'dev_user';
 
       const connections = await prisma.googleConnection.findMany({
         where: { userId },
@@ -86,11 +79,7 @@ export class GoogleController {
    */
   async deleteConnection(req: Request, res: Response) {
     try {
-      const userId = (req as any).user?.userId;
-      if (!userId) {
-        return res.status(401).json({ error: 'Unauthorized' });
-      }
-
+      const userId = 'dev_user';
       const id = req.params.id as string;
 
       // Verify ownership
@@ -118,5 +107,6 @@ export class GoogleController {
     }
   }
 }
+
 
 export default new GoogleController();
