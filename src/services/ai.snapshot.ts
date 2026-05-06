@@ -1,4 +1,5 @@
 import prisma from '../config/database';
+import { supabase } from '../config/supabase';
 import { executeWidgetQueryLocal } from '../integrations/local/local.queries';
 
 export class AISnapshotService {
@@ -8,10 +9,23 @@ export class AISnapshotService {
   static async getClientSnapshot(clientId?: string): Promise<string> {
     try {
       // Fetch Client Metadata
-      const client = await prisma.client.findUnique({
-        where: { id: clientId },
-        include: { tenant: true }
-      });
+      let client: any = null;
+      try {
+        client = await prisma.client.findUnique({
+          where: { id: clientId },
+          include: { tenant: true }
+        });
+      } catch (prismaError) {
+        console.warn('Prisma client lookup failed for AI snapshot, falling back to Supabase');
+        if (clientId) {
+          const { data, error } = await supabase
+            .from('Client')
+            .select('*')
+            .eq('id', clientId)
+            .single();
+          if (!error && data) client = data;
+        }
+      }
 
       // Fetch data for all widgets (simplified)
       const data = await executeWidgetQueryLocal({ source_filter: 'both' }, clientId);
