@@ -22,7 +22,7 @@ export class CampaignController {
         console.warn('Prisma fetch campaigns failed, falling back to Supabase REST API');
         const { data, error } = await supabase
           .from('Campaign')
-          .select('*, Client(*)')
+          .select('*')
           .order('createdAt', { ascending: false });
 
         if (error) throw error;
