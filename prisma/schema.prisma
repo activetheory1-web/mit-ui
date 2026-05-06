@@ -1,0 +1,173 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  password  String
+  name      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  tenant    Tenant?
+}
+
+model Tenant {
+  id        String   @id @default(cuid())
+  name      String
+  userId    String   @unique
+  user      User     @relation(fields: [userId], references: [id])
+  clients   Client[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Client {
+  id          String     @id @default(cuid())
+  name        String
+  industry    String
+  tenantId    String
+  tenant      Tenant     @relation(fields: [tenantId], references: [id])
+  campaigns   Campaign[]
+  platforms   String[]
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+}
+
+model Campaign {
+  id            String   @id @default(cuid())
+  name          String
+  clientId      String
+  client        Client   @relation(fields: [clientId], references: [id])
+  channel       String
+  spend         Float
+  budget        Float
+  roas          Float
+  ctr           Float
+  cpc           Float
+  cpm           Float    @default(0)
+  conv          Int
+  status        String
+  change        Float
+  impressions   Int
+  clicks        Int
+  reach         BigInt   @default(0)
+  uniqueClicks  BigInt   @default(0)
+  socialSpend   Float    @default(0)
+  costPerUniqueClick Float @default(0)
+  frequency     Float
+  active        Boolean
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model Dashboard {
+  id          String   @id @default(cuid())
+  name        String
+  description String
+  clientId    String
+  widgets     Int
+  updated     DateTime
+  schedule    String?
+  recipients  Int
+  favorite    Boolean
+  color       String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model MetaConnection {
+  id              String   @id @default(cuid())
+  userId          String
+  appClientId     String?  // Link to your app's Client ID
+  appId           String
+  appSecret       String
+  accessToken     String
+  adAccountId     String
+  accountName     String
+  status          String   @default("active")
+  lastSyncAt      DateTime?
+  syncError       String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  campaigns       MetaCampaign[]
+}
+
+model MetaCampaign {
+  id              String   @id @default(cuid())
+  metaCampaignId  String   @unique
+  connectionId    String
+  clientId        String?  // Scoping to your app's Client
+  connection      MetaConnection @relation(fields: [connectionId], references: [id])
+  name            String
+  status          String
+  objective       String?
+  dailyBudget     Float?
+  lifetimeBudget  Float?
+  spend               Float    @default(0)
+  impressions         BigInt   @default(0)
+  clicks              BigInt   @default(0)
+  ctr                 Float    @default(0)
+  cpc                 Float    @default(0)
+  cpm                 Float    @default(0)
+  reach               BigInt   @default(0)
+  uniqueClicks        BigInt   @default(0)
+  socialSpend         Float    @default(0)
+  costPerUniqueClick  Float    @default(0)
+  frequency           Float    @default(0)
+  startDate           DateTime?
+  endDate             DateTime?
+  syncedAt            DateTime @default(now())
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+}
+
+model GoogleConnection {
+  id              String   @id @default(cuid())
+  userId          String
+  appClientId     String?  // Link to your app's Client ID
+  clientId        String
+  clientSecret    String
+  refreshToken    String
+  developerToken  String
+  customerId      String
+  accountName     String
+  status          String   @default("active")
+  lastSyncAt      DateTime?
+  syncError       String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  campaigns       GoogleCampaign[]
+}
+
+model GoogleCampaign {
+  id                String   @id @default(cuid())
+  googleCampaignId  String   @unique
+  connectionId      String
+  clientId          String?  // Scoping to your app's Client
+  connection        GoogleConnection @relation(fields: [connectionId], references: [id])
+  name              String
+  status            String
+  campaignType      String?
+  spend             Float    @default(0)
+  impressions       BigInt   @default(0)
+  clicks            BigInt   @default(0)
+  ctr               Float    @default(0)
+  cpc               Float    @default(0)
+  cpm               Float    @default(0)
+  conversions       Int      @default(0)
+  reach             BigInt   @default(0)
+  uniqueClicks      BigInt   @default(0)
+  socialSpend       Float    @default(0)
+  costPerUniqueClick Float   @default(0)
+  qualityScore      Float?
+  syncedAt          DateTime @default(now())
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+}
