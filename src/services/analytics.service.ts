@@ -287,7 +287,8 @@ export class AnalyticsService {
       const { data: dbCampaigns, error: dbError } = await supabase
         .from('Campaign')
         .select('*')
-        .eq('channel', 'Meta');
+        .eq('channel', 'Meta')
+        .eq('clientId', tenantId);
 
       if (dbCampaigns && dbCampaigns.length > 0) {
         const kpi: KpiSummary = {
