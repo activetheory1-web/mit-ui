@@ -6,9 +6,6 @@ export class ClientController {
     try {
       const userId = (req as any).user?.userId;
       
-      // Fetch clients for the user's tenant
-      // For prototype: If no user is present, we could optionally return all clients
-      // but let's maintain the auth structure:
       const clients = await prisma.client.findMany({
         where: userId ? { tenant: { userId } } : {},
         include: {
@@ -45,6 +42,87 @@ export class ClientController {
       res.json(client);
     } catch (error) {
       res.status(500).json({ error: 'Failed to fetch client' });
+    }
+  }
+
+  async create(req: Request, res: Response) {
+    try {
+      const userId = (req as any).user?.userId;
+      if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+
+      const { name, industry } = req.body;
+
+      const tenant = await prisma.tenant.findFirst({
+        where: { userId },
+      });
+
+      if (!tenant) {
+        return res.status(404).json({ error: 'Tenant not found' });
+      }
+
+      const client = await prisma.client.create({
+        data: {
+          name,
+          industry,
+          tenantId: tenant.id,
+        },
+      });
+
+      res.status(201).json(client);
+    } catch (error) {
+      res.status(400).json({ error: 'Failed to create client' });
+    }
+  }
+
+  async update(req: Request, res: Response) {
+    try {
+      const userId = (req as any).user?.userId;
+      if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+
+      const id = req.params.id as string;
+      const { name, industry } = req.body;
+
+      const existing = await prisma.client.findFirst({
+        where: { id, tenant: { userId } },
+      });
+
+      if (!existing) {
+        return res.status(404).json({ error: 'Client not found' });
+      }
+
+      const client = await prisma.client.update({
+        where: { id },
+        data: { name, industry },
+      });
+
+      res.json(client);
+    } catch (error) {
+      res.status(400).json({ error: 'Failed to update client' });
+    }
+  }
+
+  async delete(req: Request, res: Response) {
+    try {
+      const userId = (req as any).user?.userId;
+      if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+
+      const id = req.params.id as string;
+
+      const existing = await prisma.client.findFirst({
+        where: { id, tenant: { userId } },
+      });
+
+      if (!existing) {
+        return res.status(404).json({ error: 'Client not found' });
+      }
+
+      await prisma.client.delete({
+        where: { id },
+      });
+
+      res.status(204).send();
+    } catch (error) {
+      res.status(400).json({ error: 'Failed to delete client' });
     }
   }
 }
