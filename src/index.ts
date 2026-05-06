@@ -9,6 +9,7 @@ import metaRoutes from './routes/meta.routes';
 import googleRoutes from './routes/google.routes';
 import oauthRoutes from './routes/oauth.routes';
 import analyticsRoutes from './routes/analytics.routes';
+import clientRoutes from './routes/client.routes';
 import errorMiddleware from './middleware/error.middleware';
 import { globalLimiter } from './middleware/rateLimit.middleware';
 import { requestLogger } from './middleware/requestLogger.middleware';
@@ -35,6 +36,7 @@ app.use(requestLogger);
 
 // Routes
 app.use('/api/auth', authRoutes);
+app.use('/api/clients', clientRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/campaigns', campaignRoutes);
 app.use('/api/ai', aiRoutes);

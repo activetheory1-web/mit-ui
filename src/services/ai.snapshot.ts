@@ -7,11 +7,17 @@ export class AISnapshotService {
    */
   static async getClientSnapshot(clientId?: string): Promise<string> {
     try {
+      // Fetch Client Metadata
+      const client = await prisma.client.findUnique({
+        where: { id: clientId },
+        include: { tenant: true }
+      });
+
       // Fetch data for all widgets (simplified)
       const data = await executeWidgetQueryLocal({ source_filter: 'both' }, clientId);
 
       if (!data || data.length === 0) {
-        return "No campaign data found for this client.";
+        return `CONTEXT: We are looking at data for client "${client?.name || 'Unknown'}" in the ${client?.industry || 'unknown'} industry. However, no campaign data was found for this client.`;
       }
 
       const totalSpend = data.reduce((sum, c) => sum + (c.spend || 0), 0);
@@ -24,6 +30,15 @@ export class AISnapshotService {
       const bestCtrCampaign = [...data].sort((a, b) => b.ctr - a.ctr)[0];
 
       let snapshot = `ACTIVE CLIENT DATA SNAPSHOT:\n`;
+      snapshot += `CLIENT INFO:\n`;
+      const clientMetadata = client as any;
+      snapshot += `- Name: ${clientMetadata?.name}\n`;
+      snapshot += `- Industry: ${clientMetadata?.industry}\n`;
+      snapshot += `- Monthly Budget: ₹${clientMetadata?.monthlyBudget?.toLocaleString()}\n`;
+      snapshot += `- Account Manager: ${clientMetadata?.accountManager}\n`;
+      snapshot += `- Platforms: ${clientMetadata?.platforms?.join(', ') || ''}\n\n`;
+
+      snapshot += `PERFORMANCE SUMMARY:\n`;
       snapshot += `- Total Campaigns: ${data.length}\n`;
       snapshot += `- Total Spend: ₹${totalSpend.toLocaleString()}\n`;
       snapshot += `- Total Clicks: ${totalClicks.toLocaleString()}\n`;

@@ -5,10 +5,9 @@ export class CampaignController {
   async getAll(req: Request, res: Response) {
     try {
       const userId = (req as any).user?.userId;
-      if (!userId) return res.status(401).json({ error: 'Unauthorized' });
-
+      // For prototype: allow fetching without auth
       const campaigns = await prisma.campaign.findMany({
-        where: { client: { tenant: { userId } } },
+        where: userId ? { client: { tenant: { userId } } } : {},
         include: {
           client: true,
         },

@@ -5,16 +5,19 @@ export class DashboardController {
   async getAll(req: Request, res: Response) {
     try {
       const userId = (req as any).user?.userId;
-      if (!userId) return res.status(401).json({ error: 'Unauthorized' });
-
-      const tenant = await prisma.tenant.findUnique({
-        where: { userId },
-        include: { clients: true },
-      });
-      const clientIds = tenant?.clients.map(c => c.id) || [];
+      // For prototype: allow fetching without auth
+      let clientIds: string[] | undefined = undefined;
+      
+      if (userId) {
+        const tenant = await prisma.tenant.findUnique({
+          where: { userId },
+          include: { clients: true },
+        });
+        clientIds = tenant?.clients.map(c => c.id) || [];
+      }
 
       const dashboards = await prisma.dashboard.findMany({
-        where: { clientId: { in: clientIds } },
+        where: clientIds ? { clientId: { in: clientIds } } : {},
         orderBy: {
           createdAt: 'desc',
         },

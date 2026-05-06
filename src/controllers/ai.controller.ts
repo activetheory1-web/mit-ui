@@ -23,7 +23,7 @@ campaign_name, source (Meta/Google), campaign_status, spend, impressions, clicks
 
 Return ONLY a valid JSON object - no explanation, no markdown:
 {
-  "summary": "A professional and conversational response. If the user greets you (e.g., 'hi'), respond with a warm, professional greeting and include a specific highlight or insight from the ACTUAL REAL DATA SNAPSHOT provided below to show you are informed. If the user asks for data/charts, explain the reasoning behind the widgets and the strategic insights found.",
+  "summary": "A professional and conversational response. ALWAYS identify the client by name and acknowledge their industry based on the REAL DATA SNAPSHOT. If the user greets you, respond warmly and include a specific highlight from the data. If the user asks for data/charts, explain the reasoning behind the widgets and the strategic insights found.",
   "widgets": [
     {
       "type": "bar_chart" | "kpi_card" | "table" | "pie_chart" | "funnel_chart" | "heatmap" | "scatter_plot" | "alert_card" | "text_annotation" | "insight_card",
