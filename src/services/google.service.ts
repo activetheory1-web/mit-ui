@@ -1,4 +1,6 @@
+import crypto from 'crypto';
 import prisma from '../config/database';
+import { supabase } from '../config/supabase';
 import { GoogleFetcher } from '../integrations/google/google.fetcher';
 import { GoogleTransformer } from '../integrations/google/google.transformer';
 import unifiedSyncService from './unified.sync.service';
@@ -48,56 +50,61 @@ export class GoogleService {
       let syncedCount = 0;
 
       for (const campaign of transformedCampaigns) {
-        await prisma.googleCampaign.upsert({
-          where: {
-            googleCampaignId: campaign.campaignId,
-          },
-          update: {
-            name: campaign.name,
-            status: campaign.status,
-            spend: campaign.spend,
-            impressions: BigInt(Math.floor(campaign.impressions)),
-            clicks: BigInt(Math.floor(campaign.clicks)),
-            ctr: campaign.ctr,
-            cpc: campaign.cpc,
-            cpm: campaign.cpm,
-            conversions: campaign.conversions,
-            reach: BigInt(Math.floor(campaign.reach)),
-            uniqueClicks: BigInt(Math.floor(campaign.clicks)), // Proxy for Google
-            socialSpend: 0, // Google is Search/Display
-            clientId: connection.appClientId,
-            updatedAt: new Date(),
-          },
-          create: {
-            connectionId,
-            googleCampaignId: campaign.campaignId,
-            clientId: connection.appClientId,
-            name: campaign.name,
-            status: campaign.status,
-            spend: campaign.spend,
-            impressions: BigInt(Math.floor(campaign.impressions)),
-            clicks: BigInt(Math.floor(campaign.clicks)),
-            ctr: campaign.ctr,
-            cpc: campaign.cpc,
-            cpm: campaign.cpm,
-            conversions: campaign.conversions,
-            reach: BigInt(Math.floor(campaign.reach)),
-            uniqueClicks: BigInt(Math.floor(campaign.clicks)),
-            socialSpend: 0,
-          },
-        });
+        const campaignData = {
+          googleCampaignId: campaign.campaignId,
+          name: campaign.name,
+          status: campaign.status,
+          spend: campaign.spend,
+          impressions: Math.floor(campaign.impressions),
+          clicks: Math.floor(campaign.clicks),
+          ctr: campaign.ctr,
+          cpc: campaign.cpc,
+          cpm: campaign.cpm,
+          conversions: campaign.conversions,
+          reach: Math.floor(campaign.reach),
+          uniqueClicks: Math.floor(campaign.clicks), // Proxy for Google
+          socialSpend: 0,
+          clientId: connection.appClientId || 'dev_client',
+          updatedAt: new Date(),
+          connectionId: connectionId
+        };
+
+        try {
+          await prisma.googleCampaign.upsert({
+            where: { googleCampaignId: campaign.campaignId },
+            update: campaignData,
+            create: campaignData
+          });
+        } catch (prismaError) {
+          // Fallback to Supabase
+          const { data: existing } = await supabase
+            .from('GoogleCampaign')
+            .select('id')
+            .eq('googleCampaignId', campaign.campaignId)
+            .maybeSingle();
+          
+          if (existing) {
+            await supabase.from('GoogleCampaign').update(campaignData).eq('id', existing.id);
+          } else {
+            await supabase.from('GoogleCampaign').insert([{ ...campaignData, id: crypto.randomUUID() }]);
+          }
+        }
         syncedCount++;
       }
 
       // Update connection status
-      await prisma.googleConnection.update({
-        where: { id: connectionId },
-        data: {
-          status: 'active',
-          lastSyncAt: new Date(),
-          syncError: null,
-        },
-      });
+      const syncedAt = new Date();
+      try {
+        await prisma.googleConnection.update({
+          where: { id: connectionId },
+          data: { status: 'active', lastSyncAt: syncedAt, syncError: null },
+        });
+      } catch (e) {
+        await supabase
+          .from('GoogleConnection')
+          .update({ status: 'active', lastSyncAt: syncedAt, syncError: null })
+          .eq('id', connectionId);
+      }
 
       // 6. Run Unified Sync
       await unifiedSyncService.upsertUnifiedCampaigns(connection.userId);

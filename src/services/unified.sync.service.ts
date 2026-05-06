@@ -33,38 +33,54 @@ export class UnifiedSyncService {
       const defaultClientId = clients.length > 0 ? clients[0].id : 'dev_client';
 
       // 2. Fetch all Meta campaigns
-      let metaConnections: any[] = [];
+      let allMetaCampaigns: any[] = [];
       try {
-        metaConnections = await prisma.metaConnection.findMany({
+        const metaConns = await prisma.metaConnection.findMany({
           where: { userId },
           include: { campaigns: true },
-        }) as any[];
+        });
+        allMetaCampaigns = metaConns.flatMap(conn => conn.campaigns || []);
       } catch (e) {
-        const { data } = await supabase
+        // Fallback: Fetch connections then fetch campaigns for each
+        const { data: connections } = await supabase
           .from('MetaConnection')
-          .select('*, campaigns:MetaCampaign(*)')
+          .select('id')
           .eq('userId', userId);
-        metaConnections = data || [];
+        
+        if (connections && connections.length > 0) {
+          const connectionIds = connections.map(c => c.id);
+          const { data: campaigns } = await supabase
+            .from('MetaCampaign')
+            .select('*')
+            .in('connectionId', connectionIds);
+          allMetaCampaigns = campaigns || [];
+        }
       }
-
-      const allMetaCampaigns = metaConnections.flatMap(conn => conn.campaigns || []);
 
       // 3. Fetch all Google campaigns
-      let googleConnections: any[] = [];
+      let allGoogleCampaigns: any[] = [];
       try {
-        googleConnections = await prisma.googleConnection.findMany({
+        const googleConns = await prisma.googleConnection.findMany({
           where: { userId },
           include: { campaigns: true },
-        }) as any[];
+        });
+        allGoogleCampaigns = googleConns.flatMap(conn => conn.campaigns || []);
       } catch (e) {
-        const { data } = await supabase
+        // Fallback: Fetch connections then fetch campaigns for each
+        const { data: connections } = await supabase
           .from('GoogleConnection')
-          .select('*, campaigns:GoogleConnection(*)') // Note: Google table naming might vary
+          .select('id')
           .eq('userId', userId);
-        googleConnections = data || [];
+        
+        if (connections && connections.length > 0) {
+          const connectionIds = connections.map(c => c.id);
+          const { data: campaigns } = await supabase
+            .from('GoogleCampaign')
+            .select('*')
+            .in('connectionId', connectionIds);
+          allGoogleCampaigns = campaigns || [];
+        }
       }
-
-      const allGoogleCampaigns = googleConnections.flatMap(conn => conn.campaigns || []);
 
       // 4. Batch upsert Meta campaigns
       for (const mc of allMetaCampaigns) {
@@ -81,10 +97,15 @@ export class UnifiedSyncService {
           cpc: Number(mc.cpc),
           conv: 0,
           roas: 0,
+          cpm: Number(mc.cpm || 0),
+          reach: Number(mc.reach || 0),
+          uniqueClicks: Number(mc.uniqueClicks || 0),
+          socialSpend: Number(mc.socialSpend || 0),
+          costPerUniqueClick: Number(mc.costPerUniqueClick || 0),
           status: mc.status,
           active: mc.status === 'ACTIVE' || mc.status === 'active',
           frequency: Number(mc.frequency || 0),
-          updatedAt: new Date().toISOString(),
+          updatedAt: new Date(),
         };
 
         try {
@@ -115,9 +136,14 @@ export class UnifiedSyncService {
           cpc: Number(gc.cpc),
           conv: Number(gc.conversions || 0),
           roas: 0,
+          cpm: Number(gc.cpm || 0),
+          reach: Number(gc.reach || 0),
+          uniqueClicks: Number(gc.uniqueClicks || 0),
+          socialSpend: Number(gc.socialSpend || 0),
+          costPerUniqueClick: Number(gc.costPerUniqueClick || 0),
           status: gc.status,
           active: gc.status === 'ACTIVE' || gc.status === 'active',
-          updatedAt: new Date().toISOString(),
+          updatedAt: new Date(),
         };
 
         try {

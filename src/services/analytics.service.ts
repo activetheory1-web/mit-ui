@@ -21,6 +21,8 @@ export interface KpiSummary {
   avg_ctr: number | null;
   avg_cpc: number | null;
   total_reach: number;
+  total_conversions: number;
+  avg_roas: number | null;
 }
 
 export interface DailySpendRow {
@@ -293,22 +295,26 @@ export class AnalyticsService {
       if (dbCampaigns && dbCampaigns.length > 0) {
         const kpi: KpiSummary = {
           total_spend: dbCampaigns.reduce((s, c) => s + (c.spend || 0), 0),
-          total_impressions: dbCampaigns.reduce((s, c) => s + (c.impressions || 0), 0),
-          total_clicks: dbCampaigns.reduce((s, c) => s + (c.clicks || 0), 0),
+          total_impressions: dbCampaigns.reduce((s, c) => s + Number(c.impressions || 0), 0),
+          total_clicks: dbCampaigns.reduce((s, c) => s + Number(c.clicks || 0), 0),
           avg_ctr: dbCampaigns.length > 0 ? (dbCampaigns.reduce((s, c) => s + (c.ctr || 0), 0) / dbCampaigns.length) : 0,
           avg_cpc: dbCampaigns.length > 0 ? (dbCampaigns.reduce((s, c) => s + (c.cpc || 0), 0) / dbCampaigns.length) : 0,
-          total_reach: dbCampaigns.reduce((s, c) => s + (c.total_reach || 0), 0),
+          total_reach: dbCampaigns.reduce((s, c) => s + Number(c.reach || 0), 0),
+          total_conversions: dbCampaigns.reduce((s, c) => s + (c.conv || 0), 0),
+          avg_roas: dbCampaigns.length > 0 ? (dbCampaigns.reduce((s, c) => s + (c.roas || 0), 0) / dbCampaigns.length) : 0,
         };
 
         const campaignTable: CampaignTableRow[] = dbCampaigns.map(c => ({
           campaign_name: c.name,
           campaign_status: c.status,
           total_spend: c.spend || 0,
-          total_impressions: c.impressions || 0,
-          total_clicks: c.clicks || 0,
+          total_impressions: Number(c.impressions || 0),
+          total_clicks: Number(c.clicks || 0),
           ctr: c.ctr || 0,
           cpc: c.cpc || 0,
-          total_reach: c.total_reach || 0,
+          total_reach: Number(c.reach || 0),
+          total_conversions: c.conv || 0,
+          roas: c.roas || 0,
         }));
 
         const spendByCampaign: CampaignSpendRow[] = [...campaignTable]
