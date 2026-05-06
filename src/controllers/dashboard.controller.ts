@@ -32,8 +32,11 @@ export class DashboardController {
           .select('*')
           .order('createdAt', { ascending: false });
 
-        if (error) throw error;
-        return res.json(data);
+        if (error) {
+          console.warn('Supabase dashboard fetch error:', error.message);
+          return res.json([]);
+        }
+        return res.json(data || []);
       }
     } catch (error) {
       console.error('Dashboard fetch error:', error);

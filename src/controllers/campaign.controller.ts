@@ -25,8 +25,11 @@ export class CampaignController {
           .select('*')
           .order('createdAt', { ascending: false });
 
-        if (error) throw error;
-        return res.json(data);
+        if (error) {
+          console.warn('Supabase campaign fetch error:', error.message);
+          return res.json([]);
+        }
+        return res.json(data || []);
       }
     } catch (error) {
       console.error('Campaign fetch error:', error);
