@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import crypto from 'crypto';
 import prisma from '../config/database';
 import { supabase } from '../config/supabase';
 
@@ -87,9 +88,10 @@ export class FabricController {
           if (updateError) throw updateError;
           connection = updated;
         } else {
+          const insertData = { ...connectionData, id: crypto.randomUUID() };
           const { data: inserted, error: insertError } = await supabase
             .from('FabricConnection')
-            .insert([connectionData])
+            .insert([insertData])
             .select()
             .single();
           

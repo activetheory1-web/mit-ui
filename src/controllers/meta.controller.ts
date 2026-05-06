@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import crypto from 'crypto';
 import prisma from '../config/database';
 import { supabase } from '../config/supabase';
 import { MetaFetcher } from '../integrations/meta/meta.fetcher';
@@ -120,9 +121,10 @@ export class MetaController {
           connection = updated;
         } else {
           // Insert new
+          const insertData = { ...connectionData, id: crypto.randomUUID() };
           const { data: inserted, error: insertError } = await supabase
             .from('MetaConnection')
-            .insert([connectionData])
+            .insert([insertData])
             .select()
             .single();
           
