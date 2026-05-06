@@ -48,36 +48,61 @@ export class MetaController {
 
       let connection;
 
-      if (existingConnection) {
-        // Update existing connection
-        connection = await prisma.metaConnection.update({
-          where: { id: existingConnection.id },
-          data: {
-            appId,
-            appSecret,
-            accessToken,
-            appClientId,
-            accountName: testResult.accountName || 'Meta Ads Account',
-            status: 'active',
-            lastSyncAt: null,
-            syncError: null,
-            updatedAt: new Date(),
-          },
-        });
-      } else {
-        // Create new connection
-        connection = await prisma.metaConnection.create({
-          data: {
-            userId,
-            appClientId,
-            appId,
-            appSecret,
-            accessToken,
-            adAccountId,
-            accountName: testResult.accountName || 'Meta Ads Account',
-            status: 'active',
-          },
-        });
+      try {
+        if (existingConnection) {
+          // Update existing connection
+          connection = await prisma.metaConnection.update({
+            where: { id: existingConnection.id },
+            data: {
+              appId,
+              appSecret,
+              accessToken,
+              appClientId,
+              accountName: testResult.accountName || 'Meta Ads Account',
+              status: 'active',
+              lastSyncAt: null,
+              syncError: null,
+              updatedAt: new Date(),
+            },
+          });
+        } else {
+          // Create new connection
+          connection = await prisma.metaConnection.create({
+            data: {
+              userId,
+              appClientId,
+              appId,
+              appSecret,
+              accessToken,
+              adAccountId,
+              accountName: testResult.accountName || 'Meta Ads Account',
+              status: 'active',
+            },
+          });
+        }
+      } catch (prismaError) {
+        console.warn('Prisma Meta connection failed, falling back to Supabase REST API');
+        
+        const connectionData = {
+          userId,
+          appClientId,
+          appId,
+          appSecret,
+          accessToken,
+          adAccountId,
+          accountName: testResult.accountName || 'Meta Ads Account',
+          status: 'active',
+          updatedAt: new Date().toISOString()
+        };
+
+        const { data, error } = await supabase
+          .from('MetaConnection')
+          .upsert([connectionData], { onConflict: 'userId,adAccountId' })
+          .select()
+          .single();
+
+        if (error) throw error;
+        connection = data;
       }
 
       res.status(201).json({
@@ -106,23 +131,35 @@ export class MetaController {
         return res.status(401).json({ error: 'Unauthorized' });
       }
 
-      const connections = await prisma.metaConnection.findMany({
-        where: { userId },
-        select: {
-          id: true,
-          accountName: true,
-          adAccountId: true,
-          status: true,
-          lastSyncAt: true,
-          syncError: true,
-          createdAt: true,
-          updatedAt: true,
-          // Don't expose sensitive credentials
-        },
-        orderBy: {
-          createdAt: 'desc',
-        },
-      });
+      let connections;
+      try {
+        connections = await prisma.metaConnection.findMany({
+          where: { userId },
+          select: {
+            id: true,
+            accountName: true,
+            adAccountId: true,
+            status: true,
+            lastSyncAt: true,
+            syncError: true,
+            createdAt: true,
+            updatedAt: true,
+          },
+          orderBy: {
+            createdAt: 'desc',
+          },
+        });
+      } catch (prismaError) {
+        console.warn('Prisma get Meta connections failed, falling back to Supabase REST API');
+        const { data, error } = await supabase
+          .from('MetaConnection')
+          .select('*')
+          .eq('userId', userId)
+          .order('createdAt', { ascending: false });
+        
+        if (error) throw error;
+        connections = data;
+      }
 
       if (connections.length === 0) {
         console.warn('⚠️ No Meta connections found. Returning mock connection for development.');
@@ -143,9 +180,19 @@ export class MetaController {
       // Get campaign count for each connection
       const connectionsWithCount = await Promise.all(
         connections.map(async (connection: any) => {
-          const campaignCount = await prisma.metaCampaign.count({
-            where: { connectionId: connection.id },
-          });
+          let campaignCount = 0;
+          try {
+            campaignCount = await prisma.metaCampaign.count({
+              where: { connectionId: connection.id },
+            });
+          } catch (e) {
+            // Fallback for campaign count
+            const { count } = await supabase
+              .from('MetaCampaign')
+              .select('*', { count: 'exact', head: true })
+              .eq('connectionId', connection.id);
+            campaignCount = count || 0;
+          }
 
           return {
             ...connection,
@@ -173,29 +220,39 @@ export class MetaController {
 
       const id = req.params.id as string;
 
-      // Verify ownership
-      const connection = await prisma.metaConnection.findFirst({
-        where: { id, userId },
-      });
+      try {
+        // Delete connection and all associated campaigns
+        await prisma.metaCampaign.deleteMany({
+          where: { connectionId: id },
+        });
 
-      if (!connection) {
-        return res.status(404).json({ error: 'Connection not found' });
+        await prisma.metaConnection.delete({
+          where: { id, userId },
+        });
+      } catch (prismaError) {
+        console.warn('Prisma delete Meta connection failed, falling back to Supabase REST API');
+        
+        // Delete campaigns first
+        await supabase
+          .from('MetaCampaign')
+          .delete()
+          .eq('connectionId', id);
+
+        const { error } = await supabase
+          .from('MetaConnection')
+          .delete()
+          .eq('id', id)
+          .eq('userId', userId);
+
+        if (error) throw error;
       }
-
-      // Delete connection and all associated campaigns
-      await prisma.metaCampaign.deleteMany({
-        where: { connectionId: id },
-      });
-
-      await prisma.metaConnection.delete({
-        where: { id },
-      });
 
       res.status(204).send();
     } catch (error) {
       console.error('Failed to delete Meta connection:', error);
       res.status(500).json({ error: 'Failed to delete connection' });
     }
+  }
   }
 
   /**
