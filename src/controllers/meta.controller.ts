@@ -18,12 +18,15 @@ export class MetaController {
         return res.status(400).json({ error: 'All credentials are required' });
       }
 
+      // Format adAccountId correctly
+      const formattedAdAccountId = adAccountId.startsWith('act_') ? adAccountId : `act_${adAccountId}`;
+
       // Test connection
       const fetcher = new MetaFetcher({
         appId,
         appSecret,
         accessToken,
-        adAccountId,
+        adAccountId: formattedAdAccountId,
       });
 
       const testResult = await fetcher.testConnection();
@@ -41,7 +44,7 @@ export class MetaController {
         existingConnection = await prisma.metaConnection.findFirst({
           where: {
             userId,
-            adAccountId,
+            adAccountId: formattedAdAccountId,
           },
         });
       } catch (e) {
@@ -50,7 +53,7 @@ export class MetaController {
           .from('MetaConnection')
           .select('id')
           .eq('userId', userId)
-          .eq('adAccountId', adAccountId)
+          .eq('adAccountId', formattedAdAccountId)
           .maybeSingle();
         existingConnection = data;
       }
@@ -83,7 +86,7 @@ export class MetaController {
               appId,
               appSecret,
               accessToken,
-              adAccountId,
+              adAccountId: formattedAdAccountId,
               accountName: testResult.accountName || 'Meta Ads Account',
               status: 'active',
             },
@@ -98,7 +101,7 @@ export class MetaController {
           appId,
           appSecret,
           accessToken,
-          adAccountId,
+          adAccountId: formattedAdAccountId,
           accountName: testResult.accountName || 'Meta Ads Account',
           status: 'active',
           updatedAt: new Date().toISOString()
