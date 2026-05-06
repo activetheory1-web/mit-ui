@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import crypto from 'crypto';
 import prisma from '../config/database';
 import { supabase } from '../config/supabase';
+import { encrypt } from '../utils/encryption.util';
 import { MetaFetcher } from '../integrations/meta/meta.fetcher';
 import metaService from '../services/meta.service';
 
@@ -68,8 +69,8 @@ export class MetaController {
             where: { id: existingConnection.id },
             data: {
               appId,
-              appSecret,
-              accessToken,
+              appSecret: encrypt(appSecret),
+              accessToken: encrypt(accessToken),
               appClientId,
               accountName: testResult.accountName || 'Meta Ads Account',
               status: 'active',
@@ -85,8 +86,8 @@ export class MetaController {
               userId,
               appClientId,
               appId,
-              appSecret,
-              accessToken,
+              appSecret: encrypt(appSecret),
+              accessToken: encrypt(accessToken),
               adAccountId: formattedAdAccountId,
               accountName: testResult.accountName || 'Meta Ads Account',
               status: 'active',
@@ -100,8 +101,8 @@ export class MetaController {
           userId,
           appClientId,
           appId,
-          appSecret,
-          accessToken,
+          appSecret: encrypt(appSecret),
+          accessToken: encrypt(accessToken),
           adAccountId: formattedAdAccountId,
           accountName: testResult.accountName || 'Meta Ads Account',
           status: 'active',
@@ -534,8 +535,8 @@ export class MetaController {
               id: crypto.randomUUID(),
               userId,
               appId,
-              appSecret,
-              accessToken,
+              appSecret: encrypt(appSecret),
+              accessToken: encrypt(accessToken),
               adAccountId: formattedAdAccountId,
               accountName: 'Meta Ads Account (Auto-created)',
               status: 'active',

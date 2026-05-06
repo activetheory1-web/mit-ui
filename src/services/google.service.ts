@@ -3,6 +3,7 @@ import prisma from '../config/database';
 import { supabase } from '../config/supabase';
 import { GoogleFetcher } from '../integrations/google/google.fetcher';
 import { GoogleTransformer } from '../integrations/google/google.transformer';
+import { decrypt } from '../utils/encryption.util';
 import unifiedSyncService from './unified.sync.service';
 
 export class GoogleService {
@@ -36,7 +37,7 @@ export class GoogleService {
         clientId: process.env.GOOGLE_CLIENT_ID,
         clientSecret: process.env.GOOGLE_CLIENT_SECRET,
         developerToken: process.env.GOOGLE_DEVELOPER_TOKEN,
-        refreshToken: connection.refreshToken,
+        refreshToken: decrypt(connection.refreshToken),
         customerId: connection.customerId,
       });
 
@@ -127,6 +128,30 @@ export class GoogleService {
       }
 
       return { success: false, count: 0, error: error.message || 'Sync failed' };
+    }
+  }
+  /**
+   * Test connection with Google Ads credentials
+   */
+  async testConnection(credentials: {
+    developerToken: string;
+    clientId: string;
+    clientSecret: string;
+    refreshToken: string;
+    customerId: string;
+  }): Promise<{ success: boolean; error?: string }> {
+    try {
+      const fetcher = new GoogleFetcher({
+        developerToken: credentials.developerToken,
+        clientId: credentials.clientId,
+        clientSecret: credentials.clientSecret,
+        refreshToken: credentials.refreshToken,
+        customerId: credentials.customerId,
+      });
+
+      return await fetcher.testConnection();
+    } catch (error: any) {
+      return { success: false, error: error.message || 'Unknown error testing Google Ads connection' };
     }
   }
 }

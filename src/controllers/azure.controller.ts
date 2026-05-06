@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import crypto from 'crypto';
 import prisma from '../config/database';
 import { supabase } from '../config/supabase';
+import { encrypt } from '../utils/encryption.util';
 
 export class AzureController {
 
@@ -57,7 +58,7 @@ export class AzureController {
               resourceGroup,
               workspaceName,
               clientId,
-              clientSecret,
+              clientSecret: encrypt(clientSecret),
               tenantId,
               status: 'active',
             },

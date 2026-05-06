@@ -3,6 +3,7 @@ import { supabase } from '../config/supabase';
 import crypto from 'crypto';
 import { MetaFetcher } from '../integrations/meta/meta.fetcher';
 import { MetaTransformer } from '../integrations/meta/meta.transformer';
+import { decrypt } from '../utils/encryption.util';
 import unifiedSyncService from './unified.sync.service';
 
 export interface MetaConnectionData {
@@ -177,8 +178,8 @@ export class MetaService {
       // 3. Fetch data from Meta
       const fetcher = new MetaFetcher({
         appId: connection.appId,
-        appSecret: connection.appSecret,
-        accessToken: connection.accessToken,
+        appSecret: decrypt(connection.appSecret),
+        accessToken: decrypt(connection.accessToken),
         adAccountId: connection.adAccountId,
       });
 

@@ -6,6 +6,7 @@ const router = Router();
 
 // Authentication disabled per user request
 // router.use(authMiddleware);
+router.post('/connect', googleController.connect);
 
 
 /**

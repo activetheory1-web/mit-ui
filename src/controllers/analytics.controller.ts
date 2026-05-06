@@ -13,8 +13,8 @@ export class AnalyticsController {
    */
   async getMetaDashboard(req: Request, res: Response): Promise<void> {
     try {
-      // Allow passing tenantId or clientId from query, fallback to dev_tenant
-      const tenantId = (req.query.tenantId as string) || (req.query.clientId as string) || 'dev_tenant';
+      // Allow passing tenantId or clientId from query, fallback to dev_client
+      const tenantId = (req.query.tenantId as string) || (req.query.clientId as string) || 'dev_client';
 
       // Parse query params
       const dateRange = parseInt(req.query.dateRange as string) || 30;

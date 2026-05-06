@@ -1,5 +1,8 @@
 import { Request, Response } from 'express';
+import crypto from 'crypto';
 import prisma from '../config/database';
+import { supabase } from '../config/supabase';
+import { encrypt } from '../utils/encryption.util';
 import googleService from '../services/google.service';
 
 export class GoogleController {
@@ -104,6 +107,114 @@ export class GoogleController {
     } catch (error) {
       console.error('Failed to delete Google connection:', error);
       res.status(500).json({ error: 'Failed to delete connection' });
+    }
+  }
+
+  /**
+   * Connect Google Ads account with credentials
+   */
+  async connect(req: Request, res: Response) {
+    try {
+      const userId = 'dev_user';
+      const { developerToken, clientId, clientSecret, refreshToken, customerId, appClientId } = req.body;
+
+      // Validate required fields
+      if (!developerToken || !clientId || !clientSecret || !refreshToken || !customerId) {
+        return res.status(400).json({ error: 'All credentials are required' });
+      }
+
+      // Test connection
+      const testResult = await googleService.testConnection({
+        developerToken,
+        clientId,
+        clientSecret,
+        refreshToken,
+        customerId,
+      });
+
+      if (!testResult.success) {
+        return res.status(400).json({
+          error: 'Failed to connect to Google Ads',
+          details: testResult.error,
+        });
+      }
+
+      // Check if connection already exists
+      let existingConnection;
+      try {
+        existingConnection = await prisma.googleConnection.findFirst({
+          where: { userId, customerId },
+        });
+      } catch (e) {
+        const { data } = await supabase
+          .from('GoogleConnection')
+          .select('id')
+          .eq('userId', userId)
+          .eq('customerId', customerId)
+          .maybeSingle();
+        existingConnection = data;
+      }
+
+      let connection;
+      const connectionData = {
+        userId,
+        appClientId,
+        customerId,
+        refreshToken: encrypt(refreshToken),
+        status: 'active',
+        updatedAt: new Date(),
+      };
+
+      try {
+        if (existingConnection) {
+          connection = await prisma.googleConnection.update({
+            where: { id: existingConnection.id },
+            data: connectionData,
+          });
+        } else {
+          connection = await prisma.googleConnection.create({
+            data: connectionData,
+          });
+        }
+      } catch (prismaError) {
+        console.warn('Prisma Google connection failed, falling back to Supabase REST API');
+        const supabaseData = {
+          ...connectionData,
+          updatedAt: new Date().toISOString()
+        };
+
+        if (existingConnection) {
+          const { data: updated, error: updateError } = await supabase
+            .from('GoogleConnection')
+            .update(supabaseData)
+            .eq('id', existingConnection.id)
+            .select()
+            .single();
+          if (updateError) throw updateError;
+          connection = updated;
+        } else {
+          const insertData = { ...supabaseData, id: crypto.randomUUID(), createdAt: new Date().toISOString() };
+          const { data: inserted, error: insertError } = await supabase
+            .from('GoogleConnection')
+            .insert([insertData])
+            .select()
+            .single();
+          if (insertError) throw insertError;
+          connection = inserted;
+        }
+      }
+
+      res.status(201).json({
+        id: connection.id,
+        customerId: connection.customerId,
+        status: connection.status,
+      });
+    } catch (error) {
+      console.error('Google Ads connection error:', error);
+      res.status(500).json({
+        error: 'Failed to connect Google Ads account',
+        details: error instanceof Error ? error.message : 'Unknown error',
+      });
     }
   }
 }
