@@ -585,9 +585,23 @@ export class MetaController {
               connectionId: actualConnectionId
             };
 
-            await supabase.from('MetaCampaign').upsert([campaignData], {
-              onConflict: 'metaCampaignId'
-            });
+            // Fix: Use check-then-insert/update pattern to ensure id is provided for new records
+            const { data: existingCampaign } = await supabase
+              .from('MetaCampaign')
+              .select('id')
+              .eq('metaCampaignId', campaign.metaCampaignId)
+              .maybeSingle();
+
+            if (existingCampaign) {
+              await supabase
+                .from('MetaCampaign')
+                .update(campaignData)
+                .eq('id', existingCampaign.id);
+            } else {
+              await supabase
+                .from('MetaCampaign')
+                .insert([{ ...campaignData, id: crypto.randomUUID() }]);
+            }
           }
 
           // Trigger unified sync

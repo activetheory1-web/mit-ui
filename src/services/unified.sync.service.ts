@@ -115,9 +115,18 @@ export class UnifiedSyncService {
             create: { ...campaignData, change: 0 },
           });
         } catch (e) {
-          // Fallback to Supabase REST API
-          const { error } = await supabase.from('Campaign').upsert([{ ...campaignData, change: 0 }]);
-          if (error) console.error('Supabase upsert failed for Meta campaign:', error);
+          // Fallback to Supabase REST API - Use check-then-insert/update
+          const { data: existing } = await supabase
+            .from('Campaign')
+            .select('id')
+            .eq('id', mc.metaCampaignId)
+            .maybeSingle();
+
+          if (existing) {
+            await supabase.from('Campaign').update({ ...campaignData, change: 0 }).eq('id', existing.id);
+          } else {
+            await supabase.from('Campaign').insert([{ ...campaignData, id: mc.metaCampaignId, change: 0 }]);
+          }
         }
       }
 
@@ -153,9 +162,18 @@ export class UnifiedSyncService {
             create: { ...campaignData, change: 0, frequency: 0 },
           });
         } catch (e) {
-          // Fallback to Supabase REST API
-          const { error } = await supabase.from('Campaign').upsert([{ ...campaignData, change: 0, frequency: 0 }]);
-          if (error) console.error('Supabase upsert failed for Google campaign:', error);
+          // Fallback to Supabase REST API - Use check-then-insert/update
+          const { data: existing } = await supabase
+            .from('Campaign')
+            .select('id')
+            .eq('id', gc.googleCampaignId)
+            .maybeSingle();
+
+          if (existing) {
+            await supabase.from('Campaign').update({ ...campaignData, change: 0, frequency: 0 }).eq('id', existing.id);
+          } else {
+            await supabase.from('Campaign').insert([{ ...campaignData, id: gc.googleCampaignId, change: 0, frequency: 0 }]);
+          }
         }
       }
 
