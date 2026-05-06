@@ -14,22 +14,12 @@ export const authMiddleware = async (req: AuthRequest, res: Response, next: Next
     const authHeader = req.headers.authorization;
 
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      // In development mode, if no token is provided, we auto-login as the first user in the system
-      const firstUser = await prisma.user.findFirst({
-        include: { tenant: true }
-      });
-
-      if (firstUser) {
-        console.warn(`⚠️ No token provided. Auto-authenticating as ${firstUser.email} for development.`);
-        (req as any).user = { 
-          userId: firstUser.id,
-          tenantId: firstUser.tenant?.id
-        };
-        return next();
-      }
-
-      console.warn('⚠️ No token provided and no users found in DB. Falling back to default ID.');
-      (req as any).user = { userId: 'clv_admin_default' }; 
+      // In development mode, bypass DB entirely and use hardcoded IDs
+      console.warn('⚠️ No token provided. Using hardcoded dev_user and dev_tenant for development.');
+      (req as any).user = { 
+        userId: 'dev_user',
+        tenantId: 'dev_tenant'
+      };
       return next();
     }
 
