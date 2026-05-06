@@ -20,14 +20,19 @@ export class ClientController {
         });
         return res.json(clients);
       } catch (prismaError) {
-        console.warn('Prisma fetch failed, falling back to Supabase REST API:', (prismaError as any).message);
-        const { data, error } = await supabase
-          .from('Client')
-          .select('*')
-          .order('createdAt', { ascending: false });
+        console.warn('Prisma fetch failed, falling back to Supabase REST API');
+        
+        try {
+          const { data, error } = await supabase
+            .from('Client')
+            .select('*')
+            .order('createdAt', { ascending: false });
 
-        if (data && data.length > 0) {
-          return res.json(data);
+          if (data && data.length > 0) {
+            return res.json(data);
+          }
+        } catch (supabaseError) {
+          console.warn('Supabase REST fetch failed, using mock data:', (supabaseError as any).message);
         }
 
         // Final fallback: Mock data for development

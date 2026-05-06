@@ -20,17 +20,18 @@ export class CampaignController {
         return res.json(campaigns);
       } catch (prismaError) {
         console.warn('Prisma fetch campaigns failed, falling back to Supabase REST API');
-        const { data, error } = await supabase
-          .from('Campaign')
-          .select('*')
-          .order('createdAt', { ascending: false });
+        
+        try {
+          const { data, error } = await supabase
+            .from('Campaign')
+            .select('*')
+            .order('createdAt', { ascending: false });
 
-        if (error) {
-          console.warn('Supabase campaign fetch error:', error.message);
-        }
-
-        if (data && data.length > 0) {
-          return res.json(data);
+          if (data && data.length > 0) {
+            return res.json(data);
+          }
+        } catch (supabaseError) {
+          console.warn('Supabase REST campaign fetch failed, using mock data:', (supabaseError as any).message);
         }
 
         // Final fallback: Mock data for development
