@@ -160,7 +160,11 @@ export class GoogleController {
         userId,
         appClientId,
         customerId,
+        clientId,
+        clientSecret: encrypt(clientSecret),
+        developerToken: encrypt(developerToken),
         refreshToken: encrypt(refreshToken),
+        accountName: 'Google Ads Account',
         status: 'active',
         updatedAt: new Date(),
       };

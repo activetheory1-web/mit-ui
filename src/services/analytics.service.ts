@@ -97,12 +97,15 @@ export class AnalyticsService {
         avg_ctr: row.avg_ctr ?? null,
         avg_cpc: row.avg_cpc ?? null,
         total_reach: row.total_reach || 0,
+        total_conversions: 0, // Fabric data doesn't have this yet
+        avg_roas: 0,
       };
     } catch (error) {
       console.error('Analytics KPI query failed:', error);
       return {
         total_spend: 0, total_impressions: 0, total_clicks: 0,
         avg_ctr: null, avg_cpc: null, total_reach: 0,
+        total_conversions: 0, avg_roas: 0
       };
     }
   }
@@ -363,6 +366,8 @@ export class AnalyticsService {
       avg_ctr: filtered.length > 0 ? (filtered.reduce((s: number, c: any) => s + (c.ctr || 0), 0) / filtered.length) : 0,
       avg_cpc: filtered.length > 0 ? (filtered.reduce((s: number, c: any) => s + (c.cpc || 0), 0) / filtered.length) : 0,
       total_reach: filtered.reduce((s: number, c: any) => s + (c.reach || 0), 0),
+      total_conversions: filtered.reduce((s: number, c: any) => s + (c.conversions || 0), 0),
+      avg_roas: filtered.length > 0 ? (filtered.reduce((s: number, c: any) => s + (c.roas || 0), 0) / filtered.length) : 0,
     };
 
     const campaignTable: CampaignTableRow[] = filtered.map((c: any) => ({
