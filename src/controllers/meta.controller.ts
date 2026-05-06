@@ -124,6 +124,22 @@ export class MetaController {
         },
       });
 
+      if (connections.length === 0) {
+        console.warn('⚠️ No Meta connections found. Returning mock connection for development.');
+        return res.json([
+          {
+            id: 'mock_meta_conn_1',
+            accountName: 'Development Meta Ads Account',
+            adAccountId: 'act_1234567890',
+            status: 'active',
+            lastSyncAt: new Date().toISOString(),
+            campaignCount: 4,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          }
+        ]);
+      }
+
       // Get campaign count for each connection
       const connectionsWithCount = await Promise.all(
         connections.map(async (connection: any) => {

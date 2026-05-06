@@ -29,11 +29,6 @@ async function main() {
   const campaigns = await readCSV(path.join(dataDir, 'campaigns.csv'));
   const dashboards = await readCSV(path.join(dataDir, 'dashboards.csv'));
 
-  if (clients.length === 0 && campaigns.length === 0 && dashboards.length === 0) {
-    console.log('⚠️ No data found in CSV files. Please populate the CSV files in frontend/data/ first.');
-    return;
-  }
-
   // 1. Create a primary user and tenant (required for relations)
   const user = await prisma.user.upsert({
     where: { email: 'admin@marketiq.com' },
@@ -55,6 +50,11 @@ async function main() {
   });
 
   console.log(`✅ User and Tenant initialized: ${tenant.name}`);
+
+  if (clients.length === 0 && campaigns.length === 0 && dashboards.length === 0) {
+    console.log('⚠️ No data found in CSV files. Skipping data migration, but User/Tenant are ready.');
+    return;
+  }
 
   // 2. Migrate Clients
   for (const row of clients) {
