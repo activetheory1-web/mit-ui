@@ -512,6 +512,64 @@ export class MetaController {
       });
 
       const campaigns = await fetcher.fetchAllCampaigns({ dateRange });
+
+      // NEW: Persist to database even for proxy calls so they show up in other browsers
+      try {
+        const userId = 'dev_user';
+        const formattedAdAccountId = adAccountId.startsWith('act_') ? adAccountId : `act_${adAccountId}`;
+
+        // Try to find an existing connection to link the campaigns to
+        const { data: existingConn } = await supabase
+          .from('MetaConnection')
+          .select('id')
+          .eq('userId', userId)
+          .eq('adAccountId', formattedAdAccountId)
+          .maybeSingle();
+
+        const actualConnectionId = existingConn?.id;
+
+        // If we don't have a connection, we might need to skip saving or handle it
+        if (actualConnectionId) {
+          for (const campaign of campaigns) {
+            const campaignData = {
+              metaCampaignId: campaign.metaCampaignId,
+              name: campaign.name,
+              status: campaign.status,
+              objective: campaign.objective,
+              dailyBudget: campaign.dailyBudget,
+              lifetimeBudget: campaign.lifetimeBudget,
+              spend: campaign.spend,
+              impressions: campaign.impressions,
+              clicks: campaign.clicks,
+              ctr: campaign.ctr,
+              cpc: campaign.cpc,
+              cpm: campaign.cpm || 0,
+              reach: campaign.reach,
+              uniqueClicks: campaign.uniqueClicks || 0,
+              socialSpend: campaign.socialSpend || 0,
+              costPerUniqueClick: campaign.costPerUniqueClick || 0,
+              frequency: campaign.frequency,
+              startDate: campaign.startDate,
+              endDate: campaign.endDate,
+              clientId: clientId || 'dev_client',
+              syncedAt: new Date(),
+              updatedAt: new Date(),
+              connectionId: actualConnectionId // Use the real connection ID
+            };
+
+            await supabase.from('MetaCampaign').upsert([campaignData], {
+              onConflict: 'metaCampaignId'
+            });
+          }
+
+          // Trigger unified sync
+          await (await import('../services/unified.sync.service')).default.upsertUnifiedCampaigns(userId);
+        } else {
+           console.warn('Proxy fetch: No existing MetaConnection found, skipping DB save to avoid FK error');
+        }
+      } catch (saveErr) {
+        console.error('Failed to save proxy data to DB:', saveErr);
+      }
       
       // Transform TransformedCampaign to the format expected by the frontend types
       const formattedCampaigns = campaigns.map((c) => ({
