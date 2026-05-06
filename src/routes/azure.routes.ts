@@ -9,6 +9,7 @@ const router = Router();
 
 
 router.post('/connect', azureController.connect.bind(azureController));
+router.get('/config', azureController.getConfig.bind(azureController));
 router.get('/connections', azureController.getConnections.bind(azureController));
 router.delete('/connections/:id', azureController.deleteConnection.bind(azureController));
 

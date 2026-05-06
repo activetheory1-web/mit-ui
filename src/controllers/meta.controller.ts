@@ -150,6 +150,45 @@ export class MetaController {
   }
 
   /**
+   * Get Meta configuration for a specific app client
+   */
+  async getConfig(req: Request, res: Response) {
+    try {
+      const userId = 'dev_user';
+      const { appClientId } = req.query;
+
+      if (!appClientId) {
+        return res.status(400).json({ error: 'appClientId is required' });
+      }
+
+      let connection;
+      try {
+        connection = await prisma.metaConnection.findFirst({
+          where: { userId, appClientId: appClientId as string },
+        });
+      } catch (e) {
+        const { data } = await supabase
+          .from('MetaConnection')
+          .select('*')
+          .eq('userId', userId)
+          .eq('appClientId', appClientId as string)
+          .maybeSingle();
+        connection = data;
+      }
+
+      if (!connection) {
+        return res.status(404).json({ error: 'Configuration not found' });
+      }
+
+      res.json(connection);
+    } catch (error) {
+      console.error('Failed to get Meta config:', error);
+      res.status(500).json({ error: 'Failed to get configuration' });
+    }
+  }
+
+
+  /**
    * Get all Meta connections
    */
   async getConnections(req: Request, res: Response) {

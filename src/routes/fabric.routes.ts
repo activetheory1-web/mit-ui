@@ -9,6 +9,7 @@ const router = Router();
 
 
 router.post('/connect', fabricController.connect.bind(fabricController));
+router.get('/config', fabricController.getConfig.bind(fabricController));
 router.get('/connections', fabricController.getConnections.bind(fabricController));
 router.delete('/connections/:id', fabricController.deleteConnection.bind(fabricController));
 

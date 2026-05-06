@@ -34,6 +34,7 @@ router.post('/proxy-fetch-campaigns', metaController.proxyFetchCampaigns.bind(me
  *         description: Not authenticated
  */
 router.post('/connect', metaController.connect.bind(metaController));
+router.get('/config', metaController.getConfig.bind(metaController));
 
 /**
  * @swagger
