@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import prisma from '../config/database';
+import { supabase } from '../config/supabase';
 import { MetaFetcher } from '../integrations/meta/meta.fetcher';
 import metaService from '../services/meta.service';
 
@@ -252,7 +253,6 @@ export class MetaController {
       console.error('Failed to delete Meta connection:', error);
       res.status(500).json({ error: 'Failed to delete connection' });
     }
-  }
   }
 
   /**
