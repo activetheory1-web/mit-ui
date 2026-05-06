@@ -1,4 +1,5 @@
 import prisma from '../config/database';
+import { supabase } from '../config/supabase';
 
 export class UnifiedSyncService {
   /**
@@ -39,83 +40,81 @@ export class UnifiedSyncService {
 
       // 4. Batch upsert Meta campaigns
       for (const mc of allMetaCampaigns) {
-        await prisma.campaign.upsert({
-          where: { id: mc.metaCampaignId }, // Using the platform ID as the primary key here to prevent duplicates
-          update: {
-            name: mc.name,
-            channel: 'Meta',
-            spend: mc.spend,
-            budget: mc.dailyBudget || mc.lifetimeBudget || 0,
-            impressions: Number(mc.impressions),
-            clicks: Number(mc.clicks),
-            ctr: mc.ctr,
-            cpc: mc.cpc,
-            conv: 0, // Meta doesn't have conv in schema right now, fallback
-            roas: 0,
-            status: mc.status,
-            active: mc.status === 'ACTIVE',
-            frequency: mc.frequency,
-            updatedAt: new Date(),
-          },
-          create: {
-            id: mc.metaCampaignId,
-            name: mc.name,
-            clientId: defaultClientId,
-            channel: 'Meta',
-            spend: mc.spend,
-            budget: mc.dailyBudget || mc.lifetimeBudget || 0,
-            impressions: Number(mc.impressions),
-            clicks: Number(mc.clicks),
-            ctr: mc.ctr,
-            cpc: mc.cpc,
-            conv: 0,
-            roas: 0,
-            status: mc.status,
-            active: mc.status === 'ACTIVE',
-            change: 0,
-            frequency: mc.frequency,
-          },
-        });
+        const campaignData = {
+          id: mc.metaCampaignId,
+          name: mc.name,
+          clientId: defaultClientId,
+          channel: 'Meta',
+          spend: mc.spend,
+          budget: mc.dailyBudget || mc.lifetimeBudget || 0,
+          impressions: Number(mc.impressions),
+          clicks: Number(mc.clicks),
+          ctr: mc.ctr,
+          cpc: mc.cpc,
+          conv: 0,
+          roas: 0,
+          status: mc.status,
+          active: mc.status === 'ACTIVE',
+          frequency: mc.frequency,
+          updatedAt: new Date().toISOString(),
+        };
+
+        // Save to Prisma (Primary)
+        try {
+          await prisma.campaign.upsert({
+            where: { id: mc.metaCampaignId },
+            update: campaignData,
+            create: { ...campaignData, change: 0 },
+          });
+        } catch (e) {
+          console.warn('Prisma upsert failed for Meta campaign, skipping to Supabase');
+        }
+
+        // Save to Supabase (Fallback/Sync Layer)
+        try {
+          await supabase.from('Campaign').upsert(campaignData);
+        } catch (sError) {
+          console.error('Supabase upsert failed for Meta campaign:', sError);
+        }
       }
 
       // 5. Batch upsert Google campaigns
       for (const gc of allGoogleCampaigns) {
-        await prisma.campaign.upsert({
-          where: { id: gc.googleCampaignId },
-          update: {
-            name: gc.name,
-            channel: 'Google Ads',
-            spend: gc.spend,
-            budget: 0, // Google doesn't have explicit budget in this schema level yet
-            impressions: Number(gc.impressions),
-            clicks: Number(gc.clicks),
-            ctr: gc.ctr,
-            cpc: gc.cpc,
-            conv: gc.conversions,
-            roas: 0, // roas calculation could be added if conversionValue existed
-            status: gc.status,
-            active: gc.status === 'ACTIVE',
-            updatedAt: new Date(),
-          },
-          create: {
-            id: gc.googleCampaignId,
-            name: gc.name,
-            clientId: defaultClientId,
-            channel: 'Google Ads',
-            spend: gc.spend,
-            budget: 0,
-            impressions: Number(gc.impressions),
-            clicks: Number(gc.clicks),
-            ctr: gc.ctr,
-            cpc: gc.cpc,
-            conv: gc.conversions,
-            roas: 0,
-            status: gc.status,
-            active: gc.status === 'ACTIVE',
-            change: 0,
-            frequency: 0,
-          },
-        });
+        const campaignData = {
+          id: gc.googleCampaignId,
+          name: gc.name,
+          clientId: defaultClientId,
+          channel: 'Google Ads',
+          spend: gc.spend,
+          budget: 0,
+          impressions: Number(gc.impressions),
+          clicks: Number(gc.clicks),
+          ctr: gc.ctr,
+          cpc: gc.cpc,
+          conv: gc.conversions,
+          roas: 0,
+          status: gc.status,
+          active: gc.status === 'ACTIVE',
+          updatedAt: new Date().toISOString(),
+        };
+
+        // Save to Prisma (Primary)
+        try {
+          await prisma.campaign.upsert({
+            where: { id: gc.googleCampaignId },
+            update: campaignData,
+            create: { ...campaignData, change: 0, frequency: 0 },
+          });
+        } catch (e) {
+          console.warn('Prisma upsert failed for Google campaign, skipping to Supabase');
+        }
+
+        // Save to Supabase (Fallback/Sync Layer)
+        try {
+          await supabase.from('Campaign').upsert(campaignData);
+        } catch (sError) {
+          console.error('Supabase upsert failed for Google campaign:', sError);
+        }
       }
 
       console.log(
