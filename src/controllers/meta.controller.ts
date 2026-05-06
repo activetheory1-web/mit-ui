@@ -519,16 +519,43 @@ export class MetaController {
         const formattedAdAccountId = adAccountId.startsWith('act_') ? adAccountId : `act_${adAccountId}`;
 
         // Try to find an existing connection to link the campaigns to
-        const { data: existingConn } = await supabase
+        let { data: existingConn } = await supabase
           .from('MetaConnection')
-          .select('id')
+          .select('*')
           .eq('userId', userId)
           .eq('adAccountId', formattedAdAccountId)
           .maybeSingle();
 
+        // If no connection exists, create one on the fly so we can save campaigns
+        if (!existingConn && appId && appSecret && accessToken) {
+          const { data: newConn, error: connError } = await supabase
+            .from('MetaConnection')
+            .insert([{
+              id: crypto.randomUUID(),
+              userId,
+              appId,
+              appSecret,
+              accessToken,
+              adAccountId: formattedAdAccountId,
+              accountName: 'Meta Ads Account (Auto-created)',
+              status: 'active',
+              appClientId: clientId,
+              updatedAt: new Date(),
+              createdAt: new Date()
+            }])
+            .select()
+            .single();
+          
+          if (connError) {
+            console.error('Failed to auto-create MetaConnection during proxy sync:', connError);
+          } else {
+            existingConn = newConn;
+          }
+        }
+
         const actualConnectionId = existingConn?.id;
 
-        // If we don't have a connection, we might need to skip saving or handle it
+        // If we have a connection (either existing or just created), save the campaigns
         if (actualConnectionId) {
           for (const campaign of campaigns) {
             const campaignData = {
@@ -554,7 +581,7 @@ export class MetaController {
               clientId: clientId || 'dev_client',
               syncedAt: new Date(),
               updatedAt: new Date(),
-              connectionId: actualConnectionId // Use the real connection ID
+              connectionId: actualConnectionId
             };
 
             await supabase.from('MetaCampaign').upsert([campaignData], {
@@ -565,7 +592,7 @@ export class MetaController {
           // Trigger unified sync
           await (await import('../services/unified.sync.service')).default.upsertUnifiedCampaigns(userId);
         } else {
-           console.warn('Proxy fetch: No existing MetaConnection found, skipping DB save to avoid FK error');
+           console.warn('Proxy fetch: Could not find or create MetaConnection, skipping DB save');
         }
       } catch (saveErr) {
         console.error('Failed to save proxy data to DB:', saveErr);
