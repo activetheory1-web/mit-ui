@@ -24,7 +24,7 @@ export class ClientController {
         
         const { data, error } = await supabase
           .from('Client')
-          .select('*, campaigns(*), dashboards(*)')
+          .select('*')
           .order('createdAt', { ascending: false });
 
         if (error) throw error;
@@ -58,7 +58,7 @@ export class ClientController {
         console.warn('Prisma fetch by ID failed, falling back to Supabase REST API');
         const { data, error } = await supabase
           .from('Client')
-          .select('*, campaigns(*), dashboards(*)')
+          .select('*')
           .eq('id', id)
           .single();
 
